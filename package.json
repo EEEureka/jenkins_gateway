@@ -11,8 +11,10 @@
   "files": [
     "dist",
     "README.md",
+    "README.zh.md",
     "SECURITY.md",
-    "docs",
+    "docs/manual.en.md",
+    "docs/manual.zh.md",
     "skills",
     "config/environments/*.example.env",
     ".env.example",

@@ -10,6 +10,10 @@ config/environments/*.local.env
 .codex/config.toml
 .codex/*.local.toml
 
+docs/*.md
+!docs/manual.en.md
+!docs/manual.zh.md
+
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

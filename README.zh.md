@@ -1,0 +1,134 @@
+# Jenkins Gateway MCP
+
+[English README](README.md) | [使用手册](docs/manual.zh.md) | [User Manual](docs/manual.en.md)
+
+Jenkins Gateway MCP 是一个本地 stdio MCP Server 和 CLI 网关，用于在 Jenkins 服务器未安装 MCP 插件的情况下，让 Codex 等 MCP 客户端通过 Jenkins 现有 HTTP API 访问 Jenkins。
+
+网关运行在用户本机，通过环境变量读取 Jenkins 凭据，再以标准 Jenkins HTTP API 调用远端 Jenkins。仓库代码和可发布文档中不得包含真实 Jenkins URL、用户 ID、API token、crumb、Authorization header 或本机 Codex 配置。
+
+## 当前状态
+
+当前仓库仍处于私有验证阶段。在新架构验收和公开前安全检查完成之前，GitHub 仓库应保持 private，不发布 npm package。
+
+当前架构包含：
+
+- shared core：Jenkins HTTP 访问、配置、脱敏、参数解析、受保护工具授权和工作流。
+- CLI：服务本地脚本、CI 和 Codex skill。
+- MCP stdio server：服务 Codex 和其他 MCP 客户端。
+- Codex skill：沉淀可复用 Jenkins 工作流。
+
+## 运行要求
+
+- Node.js 20 或更新版本。
+- Jenkins 用户 ID 和 API token。
+- 本机可以访问 Jenkins 服务器。
+
+## 快速部署
+
+### Windows PowerShell，私有源码部署
+
+适用于仓库仍为私有、npm package 尚未发布的阶段。
+
+```powershell
+git clone <private-repo-url>
+cd jenkins_gateway
+npm install
+npm run build
+
+$env:JENKINS_BASE_URL="https://jenkins.example.com/"
+$env:JENKINS_USER_ID="replace-with-jenkins-user-id"
+$env:JENKINS_API_TOKEN="<jenkins-api-token>"
+$env:JENKINS_MCP_ENABLE_PROTECTED_TOOLS="false"
+
+node dist/cli.js server info --json
+node dist/cli.js mcp stdio
+```
+
+### macOS / Linux，私有源码部署
+
+```bash
+git clone <private-repo-url>
+cd jenkins_gateway
+npm install
+npm run build
+
+export JENKINS_BASE_URL="https://jenkins.example.com/"
+export JENKINS_USER_ID="replace-with-jenkins-user-id"
+export JENKINS_API_TOKEN="<jenkins-api-token>"
+export JENKINS_MCP_ENABLE_PROTECTED_TOOLS="false"
+
+node dist/cli.js server info --json
+node dist/cli.js mcp stdio
+```
+
+### npx，公开 npm 包发布后
+
+以下命令用于未来公开 npm package 发布之后。
+
+```powershell
+# Windows PowerShell
+$env:JENKINS_BASE_URL="https://jenkins.example.com/"
+$env:JENKINS_USER_ID="replace-with-jenkins-user-id"
+$env:JENKINS_API_TOKEN="<jenkins-api-token>"
+npx -y jenkins-gateway-mcp mcp stdio
+```
+
+```bash
+# macOS / Linux
+export JENKINS_BASE_URL="https://jenkins.example.com/"
+export JENKINS_USER_ID="replace-with-jenkins-user-id"
+export JENKINS_API_TOKEN="<jenkins-api-token>"
+npx -y jenkins-gateway-mcp mcp stdio
+```
+
+## Codex MCP 配置
+
+私有源码验证配置：
+
+```toml
+[mcp_servers.jenkins]
+command = "node"
+args = ["D:/path/to/jenkins_gateway/dist/cli.js", "mcp", "stdio"]
+
+[mcp_servers.jenkins.env]
+JENKINS_MCP_PROFILE = "example"
+JENKINS_BASE_URL = "https://jenkins.example.com/"
+JENKINS_USER_ID = "replace-with-jenkins-user-id"
+JENKINS_API_TOKEN = "<jenkins-api-token>"
+JENKINS_MCP_ENABLE_PROTECTED_TOOLS = "false"
+JENKINS_MCP_PROTECTED_ALLOW_ALL = "false"
+```
+
+未来 npm 配置：
+
+```toml
+[mcp_servers.jenkins]
+command = "npx"
+args = ["-y", "jenkins-gateway-mcp", "mcp", "stdio"]
+```
+
+真实 Codex 配置应保存在本机 ignored 文件中，例如 `.codex/config.toml`。
+
+## 能力范围
+
+默认允许的只读能力：
+
+- Jenkins 连接探测。
+- 查询 Jenkins view 和 job。
+- 读取 job 元数据、build 元数据、queue item 和构建参数。
+
+默认拒绝的受保护能力：
+
+- 触发构建。
+- 停止构建。
+- 读取 console log。
+
+受保护权限支持 all、view、job 三种粒度。优先级为 job > view > all；同级冲突时 deny 优先。
+
+## 文档
+
+- [使用手册](docs/manual.zh.md)
+- [User Manual](docs/manual.en.md)
+- [安全策略](SECURITY.md)
+
+完整 CLI 参考、MCP tool 列表、配置变量、受保护权限规则、架构设计、测试门禁和发布策略见使用手册。
