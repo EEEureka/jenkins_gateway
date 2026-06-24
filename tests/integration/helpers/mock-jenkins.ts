@@ -251,6 +251,40 @@ async function handleRequest(
       return;
     }
 
+    if (request.url?.startsWith("/job/upgrade/job/deploy-405/api/json")) {
+      response.writeHead(200, {
+        "content-type": "application/json"
+      });
+      response.end(
+        JSON.stringify({
+          name: "deploy-405",
+          fullName: "upgrade/deploy-405",
+          buildable: true,
+          inQueue: false,
+          property: [
+            {
+              parameterDefinitions: [
+                {
+                  name: "serviceList",
+                  type: "ExtendedChoiceParameterDefinition",
+                  _class: "com.cwctravel.hudson.plugins.extended_choice_parameter.ExtendedChoiceParameterDefinition"
+                }
+              ]
+            }
+          ]
+        })
+      );
+      return;
+    }
+
+    if (request.method === "GET" && request.url?.startsWith("/job/upgrade/job/deploy-405/build")) {
+      response.writeHead(405, {
+        "content-type": "text/plain"
+      });
+      response.end("Method Not Allowed");
+      return;
+    }
+
     if (request.url?.startsWith("/job/upgrade/job/deploy/7/api/json")) {
       response.writeHead(200, {
         "content-type": "application/json"

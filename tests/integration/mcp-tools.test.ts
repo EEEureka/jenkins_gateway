@@ -209,6 +209,24 @@ describe("read-only Jenkins tools", () => {
 
       await expect(
         client.callTool({
+          name: "jenkins.get_build_parameters",
+          arguments: {
+            jobPath: "upgrade/deploy-405"
+          }
+        })
+      ).resolves.toMatchObject({
+        structuredContent: {
+          parameters: [
+            {
+              name: "serviceList",
+              source: "job-api"
+            }
+          ]
+        }
+      });
+
+      await expect(
+        client.callTool({
           name: "jenkins.get_queue_item",
           arguments: {
             queueId: 100

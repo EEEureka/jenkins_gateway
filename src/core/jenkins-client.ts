@@ -234,7 +234,7 @@ export class JenkinsClient {
         const html = await this.requestText(`${jobPathToUrlPath(jobPath)}/build`);
         parameters = mergeBuildPageChoices(parameters, html);
       } catch (error) {
-        if (!(error instanceof JenkinsHttpError && error.status === 404)) {
+        if (!(error instanceof JenkinsHttpError && (error.status === 404 || error.status === 405))) {
           throw error;
         }
       }
