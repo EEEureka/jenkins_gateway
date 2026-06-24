@@ -91,7 +91,7 @@ src/
   cli.ts
   mcp.ts
 skills/
-  jenkins/
+  jenkins-workflow/
     SKILL.md
     references/
       workflows.md

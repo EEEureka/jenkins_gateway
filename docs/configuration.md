@@ -26,8 +26,6 @@
 | `JENKINS_MCP_CONSOLE_LOG_MAX_BYTES` | 否 | `65536` | 单次 console log 返回最大字节数 |
 | `JENKINS_MCP_LOG_LEVEL` | 否 | `info` | 日志级别 |
 
-`JENKINS_MCP_READ_ONLY`、`JENKINS_MCP_ENABLE_MUTATIONS`、`JENKINS_MCP_JOB_ALLOWLIST` 是当前早期实现中的临时变量。新架构阶段会迁移到上表的受保护工具权限模型。
-
 ## 当前项目环境
 
 当前仓库只提交通用模板。真实 Jenkins 环境记录在本机 ignored 文件中，不进入 Git 历史。
@@ -43,7 +41,7 @@
 
 `.env.local` 用于当前机器调试和验证，已被 `.gitignore` 排除。
 
-后续实现 CLI 时，建议支持以下加载方式：
+CLI 支持以下加载方式：
 
 ```powershell
 # Windows PowerShell

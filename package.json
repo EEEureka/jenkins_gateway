@@ -5,6 +5,7 @@
   "description": "Local stdio MCP gateway for Jenkins HTTP API.",
   "type": "module",
   "bin": {
+    "jenkins-gateway": "dist/cli.js",
     "jenkins-gateway-mcp": "dist/cli.js"
   },
   "files": [
@@ -12,6 +13,7 @@
     "README.md",
     "SECURITY.md",
     "docs",
+    "skills",
     "config/environments/*.example.env",
     ".env.example",
     ".codex/jenkins-mcp.example.toml"

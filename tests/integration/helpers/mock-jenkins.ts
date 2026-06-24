@@ -89,7 +89,44 @@ async function handleRequest(
           mode: "NORMAL",
           nodeName: "built-in",
           nodeDescription: "mock controller",
-          useCrumbs: true
+          useCrumbs: true,
+          views: [
+            {
+              name: "release",
+              url: "http://jenkins/view/release/",
+              _class: "hudson.model.ListView"
+            }
+          ]
+        })
+      );
+      return;
+    }
+
+    if (request.url?.startsWith("/view/release/api/json")) {
+      response.writeHead(200, {
+        "content-type": "application/json"
+      });
+      response.end(
+        JSON.stringify({
+          name: "release",
+          url: "http://jenkins/view/release/",
+          description: "Release jobs",
+          jobs: [
+            {
+              name: "build-app",
+              fullName: "folder a/build-app",
+              url: "http://jenkins/job/folder%20a/job/build-app/",
+              color: "blue",
+              _class: "hudson.model.FreeStyleProject"
+            },
+            {
+              name: "deploy",
+              fullName: "upgrade/deploy",
+              url: "http://jenkins/job/upgrade/job/deploy/",
+              color: "blue",
+              _class: "hudson.model.FreeStyleProject"
+            }
+          ]
         })
       );
       return;
@@ -128,7 +165,22 @@ async function handleRequest(
           lastBuild: {
             number: 42,
             url: "http://jenkins/job/folder%20a/job/build-app/42/"
-          }
+          },
+          property: [
+            {
+              parameterDefinitions: [
+                {
+                  name: "branch",
+                  type: "ChoiceParameterDefinition",
+                  _class: "hudson.model.ChoiceParameterDefinition",
+                  choices: ["main", "release"],
+                  defaultParameterValue: {
+                    value: "main"
+                  }
+                }
+              ]
+            }
+          ]
         })
       );
       return;
@@ -155,7 +207,63 @@ async function handleRequest(
         "x-text-size": "64",
         "x-more-data": "false"
       });
-      response.end("line 1\nline 2\nline 3\n");
+      response.end("line 1\nsuper-secret\nline 3\n");
+      return;
+    }
+
+    if (request.url?.startsWith("/job/upgrade/job/deploy/api/json")) {
+      response.writeHead(200, {
+        "content-type": "application/json"
+      });
+      response.end(
+        JSON.stringify({
+          name: "deploy",
+          fullName: "upgrade/deploy",
+          buildable: true,
+          inQueue: false,
+          lastBuild: {
+            number: 7,
+            url: "http://jenkins/job/upgrade/job/deploy/7/"
+          },
+          property: [
+            {
+              parameterDefinitions: [
+                {
+                  name: "serviceList",
+                  type: "ExtendedChoiceParameterDefinition",
+                  _class: "com.cwctravel.hudson.plugins.extended_choice_parameter.ExtendedChoiceParameterDefinition"
+                }
+              ]
+            }
+          ]
+        })
+      );
+      return;
+    }
+
+    if (request.method === "GET" && request.url?.startsWith("/job/upgrade/job/deploy/build")) {
+      response.writeHead(200, {
+        "content-type": "text/html"
+      });
+      response.end(
+        '<html><body><div><span>serviceList</span><input type="checkbox" value="MACC-FRONT-RELEASE"><input type="checkbox" value="OCE-RELEASE"></div></body></html>'
+      );
+      return;
+    }
+
+    if (request.url?.startsWith("/job/upgrade/job/deploy/7/api/json")) {
+      response.writeHead(200, {
+        "content-type": "application/json"
+      });
+      response.end(
+        JSON.stringify({
+          number: 7,
+          result: "SUCCESS",
+          building: false,
+          duration: 3000,
+          url: "http://jenkins/job/upgrade/job/deploy/7/"
+        })
+      );
       return;
     }
 
@@ -170,6 +278,22 @@ async function handleRequest(
 
       response.writeHead(201, {
         location: "/queue/item/101/"
+      });
+      response.end("");
+      return;
+    }
+
+    if (request.method === "POST" && request.url === "/job/upgrade/job/deploy/buildWithParameters") {
+      if (request.headers["jenkins-crumb"] !== "crumb-value") {
+        response.writeHead(403, {
+          "content-type": "text/plain"
+        });
+        response.end("missing crumb");
+        return;
+      }
+
+      response.writeHead(201, {
+        location: "/queue/item/201/"
       });
       response.end("");
       return;
@@ -200,6 +324,24 @@ async function handleRequest(
           id: 100,
           blocked: false,
           buildable: true
+        })
+      );
+      return;
+    }
+
+    if (request.url === "/queue/item/201/api/json") {
+      response.writeHead(200, {
+        "content-type": "application/json"
+      });
+      response.end(
+        JSON.stringify({
+          id: 201,
+          blocked: false,
+          buildable: false,
+          executable: {
+            number: 7,
+            url: "http://jenkins/job/upgrade/job/deploy/7/"
+          }
         })
       );
       return;

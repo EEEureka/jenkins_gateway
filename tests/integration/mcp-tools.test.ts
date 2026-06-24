@@ -71,14 +71,13 @@ describe("jenkins.get_server_info", () => {
 });
 
 describe("read-only Jenkins tools", () => {
-  it("lists jobs and reads job, build, log, and queue state", async () => {
+  it("lists jobs, views and reads job, build, parameters, and queue state", async () => {
     mockJenkins = await startMockJenkins();
     const config = loadConfig({
       JENKINS_MCP_PROFILE: "integration",
       JENKINS_BASE_URL: mockJenkins.baseUrl,
       JENKINS_USER_ID: "alice",
-      JENKINS_API_TOKEN: "super-secret",
-      JENKINS_MCP_CONSOLE_MAX_CHARS: "8"
+      JENKINS_API_TOKEN: "super-secret"
     });
 
     const server = createServer({
@@ -99,8 +98,10 @@ describe("read-only Jenkins tools", () => {
         expect.arrayContaining([
           "jenkins.list_jobs",
           "jenkins.get_job",
+          "jenkins.list_views",
+          "jenkins.get_view",
+          "jenkins.get_build_parameters",
           "jenkins.get_build",
-          "jenkins.get_console_log",
           "jenkins.get_queue_item"
         ])
       );
@@ -153,17 +154,56 @@ describe("read-only Jenkins tools", () => {
 
       await expect(
         client.callTool({
-          name: "jenkins.get_console_log",
+          name: "jenkins.list_views",
+          arguments: {}
+        })
+      ).resolves.toMatchObject({
+        structuredContent: {
+          views: [
+            {
+              name: "release"
+            }
+          ]
+        }
+      });
+
+      await expect(
+        client.callTool({
+          name: "jenkins.get_view",
           arguments: {
-            jobPath: "folder a/build-app",
-            build: 42
+            viewName: "release"
           }
         })
       ).resolves.toMatchObject({
         structuredContent: {
-          text: "line 1\nl",
-          nextStart: 64,
-          truncated: true
+          name: "release",
+          jobs: [
+            {
+              fullName: "folder a/build-app"
+            },
+            {
+              fullName: "upgrade/deploy"
+            }
+          ]
+        }
+      });
+
+      await expect(
+        client.callTool({
+          name: "jenkins.get_build_parameters",
+          arguments: {
+            jobPath: "upgrade/deploy"
+          }
+        })
+      ).resolves.toMatchObject({
+        structuredContent: {
+          parameters: [
+            {
+              name: "serviceList",
+              choices: ["MACC-FRONT-RELEASE", "OCE-RELEASE"],
+              source: "build-page-html"
+            }
+          ]
         }
       });
 
@@ -187,8 +227,8 @@ describe("read-only Jenkins tools", () => {
   });
 });
 
-describe("controlled Jenkins mutation tools", () => {
-  it("rejects mutations by default", async () => {
+describe("protected Jenkins tools", () => {
+  it("rejects protected tools by default", async () => {
     mockJenkins = await startMockJenkins();
     const config = loadConfig({
       JENKINS_MCP_PROFILE: "integration",
@@ -210,14 +250,25 @@ describe("controlled Jenkins mutation tools", () => {
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
 
     try {
-      const result = await client.callTool({
+      const triggerResult = await client.callTool({
         name: "jenkins.trigger_build",
         arguments: {
           jobPath: "folder a/build-app"
         }
       });
 
-      expect(result).toMatchObject({
+      const logResult = await client.callTool({
+        name: "jenkins.get_console_log",
+        arguments: {
+          jobPath: "folder a/build-app",
+          build: 42
+        }
+      });
+
+      expect(triggerResult).toMatchObject({
+        isError: true
+      });
+      expect(logResult).toMatchObject({
         isError: true
       });
       expect(mockJenkins.requests.some((request) => request.method === "POST")).toBe(false);
@@ -227,16 +278,16 @@ describe("controlled Jenkins mutation tools", () => {
     }
   });
 
-  it("triggers and stops builds only when mutation settings and allowlist permit it", async () => {
+  it("reads logs, triggers and stops builds only when protected rules permit it", async () => {
     mockJenkins = await startMockJenkins();
     const config = loadConfig({
       JENKINS_MCP_PROFILE: "integration",
       JENKINS_BASE_URL: mockJenkins.baseUrl,
       JENKINS_USER_ID: "alice",
       JENKINS_API_TOKEN: "super-secret",
-      JENKINS_MCP_READ_ONLY: "false",
-      JENKINS_MCP_ENABLE_MUTATIONS: "true",
-      JENKINS_MCP_JOB_ALLOWLIST: "folder a/build-app"
+      JENKINS_MCP_ENABLE_PROTECTED_TOOLS: "true",
+      JENKINS_MCP_PROTECTED_JOB_ALLOWLIST: "folder a/build-app",
+      JENKINS_MCP_CONSOLE_LOG_MAX_BYTES: "8"
     });
 
     const server = createServer({
@@ -252,6 +303,38 @@ describe("controlled Jenkins mutation tools", () => {
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
 
     try {
+      await expect(
+        client.callTool({
+          name: "jenkins.get_console_log",
+          arguments: {
+            jobPath: "folder a/build-app",
+            build: 42
+          }
+        })
+      ).resolves.toMatchObject({
+        structuredContent: {
+          text: "line 1\ns",
+          nextStart: 64,
+          truncated: true
+        }
+      });
+
+      await expect(
+        client.callTool({
+          name: "jenkins.get_console_log",
+          arguments: {
+            jobPath: "folder a/build-app",
+            build: 42,
+            maxBytes: 64
+          }
+        })
+      ).resolves.toMatchObject({
+        structuredContent: {
+          text: expect.stringContaining("super-secret"),
+          truncated: false
+        }
+      });
+
       await expect(
         client.callTool({
           name: "jenkins.trigger_build",

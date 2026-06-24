@@ -13,8 +13,10 @@ describe("loadConfig", () => {
     expect(config.baseUrl.toString()).toBe("https://jenkins.example.com/root/");
     expect(config.profile).toBe("default");
     expect(config.userId).toBe("alice");
-    expect(config.readOnly).toBe(true);
-    expect(config.enableMutations).toBe(false);
+    expect(config.enableProtectedTools).toBe(false);
+    expect(config.protectedAllowAll).toBe(false);
+    expect(config.protectedJobAllowlist).toEqual([]);
+    expect(config.consoleLogMaxBytes).toBe(65_536);
     expect(config.requestTimeoutMs).toBe(30_000);
   });
 
