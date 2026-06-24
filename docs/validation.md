@@ -18,12 +18,12 @@ npm run test:integration
 - 单测：`tests/unit/**`
   - 配置解析。
   - 凭据脱敏。
-  - Jenkins job path 编码与 allowlist 判断。
+  - Jenkins job path 编码与受保护工具权限判断。
   - MCP server 创建。
 - 集成测试：`tests/integration/**`
   - 启动 CLI stdio server。
   - 用 MCP in-memory transport 调用 tools。
-  - 用 mock Jenkins HTTP server 验证 API 路径、Basic Auth、crumb、写操作开关和日志截断。
+  - 用 mock Jenkins HTTP server 验证 API 路径、Basic Auth、crumb、受保护工具开关和日志读取上限。
 
 ## CI 门禁
 
@@ -55,4 +55,4 @@ npm pack --dry-run --ignore-scripts
 - Jenkins API token
 - 本机日志或临时输出
 
-当前项目的 `package.json` 保持 `"private": true`，项目未达到可交付状态前不得发布 npm package。
+当前项目的 `package.json` 保持 `"private": true`，在 shared core + CLI + MCP + Codex skill 新架构验收和公开前安全检查通过之前，不得发布 npm package。

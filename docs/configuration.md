@@ -16,12 +16,17 @@
 | `JENKINS_API_TOKEN` | 是 | 无 | Jenkins API token |
 | `JENKINS_MCP_PROFILE` | 否 | `default` | 当前环境名称，用于日志和多环境切换 |
 | `JENKINS_MCP_CONFIG` | 否 | 无 | 外部 JSON/TOML/YAML 配置文件路径，后续实现时确定格式 |
-| `JENKINS_MCP_READ_ONLY` | 否 | `true` | 只读模式，建议默认保持开启 |
-| `JENKINS_MCP_ENABLE_MUTATIONS` | 否 | `false` | 是否允许触发构建、停止构建等写操作 |
-| `JENKINS_MCP_JOB_ALLOWLIST` | 否 | 空 | 允许写操作的 job path 列表，建议逗号分隔 |
+| `JENKINS_MCP_ENABLE_PROTECTED_TOOLS` | 否 | `false` | 是否允许调用受保护工具 |
+| `JENKINS_MCP_PROTECTED_ALLOW_ALL` | 否 | `false` | 是否允许所有 job 调用受保护工具 |
+| `JENKINS_MCP_PROTECTED_VIEW_ALLOWLIST` | 否 | 空 | 允许调用受保护工具的 Jenkins view 列表 |
+| `JENKINS_MCP_PROTECTED_VIEW_DENYLIST` | 否 | 空 | 禁止调用受保护工具的 Jenkins view 列表 |
+| `JENKINS_MCP_PROTECTED_JOB_ALLOWLIST` | 否 | 空 | 允许调用受保护工具的 job path 列表 |
+| `JENKINS_MCP_PROTECTED_JOB_DENYLIST` | 否 | 空 | 禁止调用受保护工具的 job path 列表 |
 | `JENKINS_MCP_REQUEST_TIMEOUT_MS` | 否 | `30000` | Jenkins API 请求超时时间 |
-| `JENKINS_MCP_CONSOLE_MAX_CHARS` | 否 | `20000` | 单次 console log 返回最大字符数 |
+| `JENKINS_MCP_CONSOLE_LOG_MAX_BYTES` | 否 | `65536` | 单次 console log 返回最大字节数 |
 | `JENKINS_MCP_LOG_LEVEL` | 否 | `info` | 日志级别 |
+
+`JENKINS_MCP_READ_ONLY`、`JENKINS_MCP_ENABLE_MUTATIONS`、`JENKINS_MCP_JOB_ALLOWLIST` 是当前早期实现中的临时变量。新架构阶段会迁移到上表的受保护工具权限模型。
 
 ## 当前项目环境
 
@@ -78,15 +83,21 @@ JENKINS_MCP_PROFILE = "example"
 JENKINS_BASE_URL = "https://jenkins.example.com/"
 JENKINS_USER_ID = "replace-with-jenkins-user-id"
 JENKINS_API_TOKEN = "<local-token>"
-JENKINS_MCP_READ_ONLY = "true"
-JENKINS_MCP_ENABLE_MUTATIONS = "false"
+JENKINS_MCP_ENABLE_PROTECTED_TOOLS = "false"
+JENKINS_MCP_PROTECTED_ALLOW_ALL = "false"
+JENKINS_MCP_PROTECTED_VIEW_ALLOWLIST = ""
+JENKINS_MCP_PROTECTED_VIEW_DENYLIST = ""
+JENKINS_MCP_PROTECTED_JOB_ALLOWLIST = ""
+JENKINS_MCP_PROTECTED_JOB_DENYLIST = ""
 ```
 
 ## 安全约束
 
 - 不提交 `.env.local`、`.codex/config.toml` 或任何包含 token 的文件。
-- 日志必须脱敏 `JENKINS_API_TOKEN`、`Authorization`、crumb。
-- 默认只读；写操作需要 `JENKINS_MCP_ENABLE_MUTATIONS=true`。
-- 生产环境触发构建前应配置 job allowlist。
-- 项目未完工期间 GitHub 仓库保持私有；达到可交付状态并完成安全检查后，才转为公共仓库并发布 npm package。
+- 服务自身日志必须脱敏 `JENKINS_API_TOKEN`、`Authorization`、crumb。
+- 普通读工具默认允许，受保护工具默认拒绝。
+- 受保护工具需要 `JENKINS_MCP_ENABLE_PROTECTED_TOOLS=true`，并命中 all / view / job 显式授权。
+- `jenkins.get_console_log` 属于受保护工具，不对 console 内容做脱敏，但必须限制最大读取量且不得写入本地日志。
+- 生产环境触发构建前应配置 view 或 job 粒度的受保护工具权限。
+- 项目未完工或新架构未验收期间 GitHub 仓库保持私有；完成 shared core + CLI + MCP + Codex skill 新架构并通过安全检查后，才转为公共仓库并发布 npm package。
 - 如果 token 曾进入公开渠道或 Git 历史，应立即轮换。

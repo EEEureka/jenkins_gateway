@@ -6,7 +6,7 @@
 
 这个方案不需要改动 Jenkins 服务器端，只要求当前账号具备 Jenkins API token 和对应任务权限。
 
-项目发布状态也有约束：未完工期间 GitHub 仓库保持私有，不向 npm registry 发布；项目达到可交付状态、完成安全检查和文档收敛后，再转为公共仓库并发布 npm package。
+项目发布状态也有约束：未完工期间 GitHub 仓库保持私有，不向 npm registry 发布；在完成 shared core + CLI + MCP + Codex skill 新架构、通过新架构验收、完成安全检查和文档收敛后，再转为公共仓库并发布 npm package。
 
 ## 总体架构
 
@@ -46,6 +46,17 @@ flowchart LR
 
 HTTP/SSE transport 可作为后续增强，用于团队共享网关或集中代理，但不是第一阶段目标。
 
+## CLI 与 Skill 演进方向
+
+当前 MCP 方案不应被 `jenkins-cli + skill` 直接替换。推荐演进为 shared core + CLI + MCP + Codex skill 的组合架构：
+
+- shared core 负责 Jenkins HTTP API、认证、参数解析、受保护工具授权、日志边界控制和工作流编排。
+- MCP 作为跨客户端协议入口，保持普通读工具与受保护工具边界。
+- CLI 作为稳定 JSON 命令入口，服务脚本、CI、本地调试和 Codex skill。
+- Codex skill 固化团队 Jenkins 工作流，例如参数化升级、stage/release 分类、组件映射和结果核验。
+
+详细设计见 [CLI + Skill 改进方案](cli-skill-improvement-plan.md)。
+
 ## Jenkins API 调用方式
 
 认证方式使用 Jenkins 标准 Basic Auth：
@@ -74,16 +85,19 @@ Job 路径需要兼容 Jenkins folder：
 | `jenkins.list_jobs` | 只读 | 列出根目录或指定 folder 下的 job |
 | `jenkins.get_job` | 只读 | 获取 job 基础信息、参数定义、最近构建 |
 | `jenkins.get_build` | 只读 | 获取指定 build 的状态、时间、结果、变更摘要 |
-| `jenkins.get_console_log` | 只读 | 分页读取 console log，默认限制最大返回字符数 |
+| `jenkins.get_console_log` | 受保护读 | 分页读取 console log，默认限制最大返回量，不做内容脱敏 |
 | `jenkins.get_queue_item` | 只读 | 查询排队任务状态 |
-| `jenkins.trigger_build` | 写操作 | 触发无参数或参数化构建，默认关闭 |
-| `jenkins.stop_build` | 写操作 | 停止构建，默认关闭 |
+| `jenkins.trigger_build` | 受保护写 | 触发无参数或参数化构建，默认关闭 |
+| `jenkins.stop_build` | 受保护写 | 停止构建，默认关闭 |
 
-写操作必须受配置开关控制：
+受保护工具必须受配置开关控制：
 
-- 默认 `JENKINS_MCP_READ_ONLY=true`。
-- 只有显式设置 `JENKINS_MCP_ENABLE_MUTATIONS=true` 时，才允许触发构建或停止构建。
-- 可通过 `JENKINS_MCP_JOB_ALLOWLIST` 限制允许操作的 job path。
+- 普通读工具默认允许读取 Jenkins 元数据。
+- 默认 `JENKINS_MCP_ENABLE_PROTECTED_TOOLS=false`。
+- 受保护工具包含 `jenkins.get_console_log`、`jenkins.trigger_build`、`jenkins.stop_build`。
+- 受保护工具权限粒度支持 all / view / job。
+- 权限优先级为 job > view > all，同级冲突时 deny 优先。
+- 可通过 `JENKINS_MCP_PROTECTED_ALLOW_ALL` 临时允许全部受保护工具，再用 view/job denylist 排除高风险范围。
 
 ## 错误与日志策略
 
@@ -91,7 +105,8 @@ Job 路径需要兼容 Jenkins folder：
 - 日志中必须脱敏 token、crumb、Authorization header。
 - Jenkins 4xx 直接返回可读错误，保留 status code 和 Jenkins message。
 - Jenkins 5xx、网络超时返回可重试错误，但不自动重放写操作。
-- Console log 默认截断，避免 MCP 响应过大。
+- Console log 作为受保护工具，默认截断或分页，避免 MCP 响应过大。
+- Console log 内容不做脱敏，避免破坏排障上下文；服务端不得把原始 console 内容写入 stderr、本地日志或错误对象。
 
 ## 账号与环境解耦
 
@@ -110,17 +125,18 @@ Job 路径需要兼容 Jenkins folder：
 
 开发期仓库保持私有，只在私有 GitHub 仓库中运行 build/test CI。这个阶段可以保留未稳定的接口、内部任务记录和实验文档，但仍不得提交真实 token。
 
-开发期不发布 npm package。需要在其他机器临时验证时，优先使用本地 checkout 后执行 `npm install && npm run build`，或在私有仓库权限可控的前提下通过 GitHub URL 临时安装。
+开发期和新架构演进期不发布 npm package。需要在其他机器临时验证时，优先使用本地 checkout 后执行 `npm install && npm run build`，或在私有仓库权限可控的前提下通过 GitHub URL 临时安装。
 
 ### 交付期
 
-达到可交付状态后，再执行公开发布流程：
+完成 shared core + CLI + MCP + Codex skill 新架构并通过验收后，再执行公开发布流程：
 
 1. 完成公开前安全检查，确认 Git 历史、文档、示例、测试 fixture 中没有真实凭据。
-2. 将 GitHub 仓库从 private 转为 public。
-3. GitHub Actions 在 tag/release 时构建 TypeScript 并运行测试。
-4. 发布公开 npm package 到 npm registry。
-5. MCP 客户端通过 `npx -y jenkins-gateway-mcp` 启动。
+2. 确认新架构后的 CLI、MCP 和 Skill 文档均已通过私有环境验证。
+3. 将 GitHub 仓库从 private 转为 public。
+4. GitHub Actions 在 tag/release 时构建 TypeScript 并运行测试。
+5. 发布公开 npm package 到 npm registry。
+6. MCP 客户端通过 `npx -y jenkins-gateway-mcp` 启动。
 
 如果 `jenkins-gateway-mcp` 包名已被占用，改用公开 scoped package，例如 `@<scope>/jenkins-gateway-mcp`。
 
@@ -128,8 +144,9 @@ Job 路径需要兼容 Jenkins folder：
 
 - Jenkins 权限不足：网关需要把权限错误原样暴露，不能包装成泛化失败。
 - Job path 编码错误：folder job 需要专门单测。
-- 写操作误触发：默认只读，写操作必须双开关与 allowlist 保护。
-- 过早公开：项目未完工或未完成安全检查时不得转公共仓库，不得发布 npm package。
+- 受保护工具误用：默认关闭，必须通过主开关和 all/view/job 显式授权。
+- 过早公开：项目未完工、新架构未验收或未完成安全检查时不得转公共仓库，不得发布 npm package。
 - 包名冲突：发布前需要确认 npm package name 是否可用；不可用时使用 scoped public package。
 - 凭据泄漏：真实 Jenkins token 绝不能进入 Git 历史，泄漏后需要立即轮换。
-- 大日志响应：console log 必须分页和截断。
+- 大日志响应：console log 必须分页和限制最大读取量。
+- 敏感日志读取：console log 不做内容脱敏，因此必须归入受保护工具。

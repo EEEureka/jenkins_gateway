@@ -4,14 +4,14 @@
 
 本项目采用两阶段发布策略：
 
-- 开发期：GitHub 仓库保持私有，不发布 npm package。
-- 交付期：项目达到可交付状态并完成公开前安全检查后，才将仓库转为公共仓库，并发布到 npm registry。
+- 开发期和新架构演进期：GitHub 仓库保持私有，不发布 npm package。
+- 交付期：完成 shared core + CLI + MCP + Codex skill 新架构并通过公开前安全检查后，才将仓库转为公共仓库，并发布到 npm registry。
 
 这样既保留后续公共分发和 `npx` 部署能力，又避免未完工代码、内部记录或误放的敏感信息过早进入公共渠道。
 
-## 开发期：私有 GitHub 仓库
+## 开发期与新架构演进期：私有 GitHub 仓库
 
-开发期仓库可以提交：
+开发期和新架构演进期仓库可以提交：
 
 - `src/**`
 - `package.json`
@@ -23,7 +23,7 @@
 - `.codex/jenkins-mcp.example.toml`
 - GitHub Actions build/test workflow
 
-开发期仓库不应提交：
+开发期和新架构演进期仓库不应提交：
 
 - `.env.local`
 - `.codex/config.toml`
@@ -32,15 +32,16 @@
 - 任何真实 Jenkins crumb、Authorization header、console 中的敏感内容
 - 构建产物，除非后续明确采用 committed dist 策略
 
-开发期 CI 只做 build/test/lint，不执行 `npm publish`。
+开发期和新架构演进期 CI 只做 build/test/lint，不执行 `npm publish`。
 
 ## 交付期：转公开与 npm registry
 
 只有同时满足以下条件，才允许转为公共仓库并发布 npm package：
 
-- MCP server 功能闭环：至少包含配置加载、连接探测、只读 tools、错误处理和日志脱敏。
+- 新架构验收通过：shared core、CLI、MCP 和 Codex skill 均完成，且端到端 workflow 验证通过。
+- MCP server 功能闭环：至少包含配置加载、连接探测、普通只读 tools、受保护 tools、错误处理和服务日志脱敏。
 - 跨平台验证通过：Windows PowerShell 与 macOS/Linux shell 均可启动。
-- 默认安全行为明确：默认只读，写操作需要显式开关。
+- 默认安全行为明确：普通读工具默认允许，受保护工具默认拒绝且需要显式授权。
 - 文档完整：README、配置说明、Codex 装载示例、常见错误和安全策略可被新用户直接使用。
 - 公开前安全检查通过：Git 历史、当前文件、测试 fixture、日志样例中没有真实 token。
 - npm 包内容检查通过：`npm pack --dry-run` 不包含本地配置或敏感文件。
@@ -48,11 +49,12 @@
 交付发布流程：
 
 1. 冻结 release 分支或 tag 候选版本。
-2. 执行公开前安全检查。
-3. 将 GitHub 仓库从 private 转为 public。
-4. 创建 release tag。
-5. GitHub Actions 构建、测试并发布到 npm registry。
-6. 用全新环境验证 `npx` 和 Codex 装载。
+2. 执行新架构端到端验收。
+3. 执行公开前安全检查。
+4. 将 GitHub 仓库从 private 转为 public。
+5. 创建 release tag。
+6. GitHub Actions 构建、测试并发布到 npm registry。
+7. 用全新环境验证 `npx` 和 Codex 装载。
 
 ## package 命名
 
@@ -148,7 +150,7 @@ Windows PowerShell：
 $env:JENKINS_BASE_URL="https://jenkins.example.com/"
 $env:JENKINS_USER_ID="replace-with-jenkins-user-id"
 $env:JENKINS_API_TOKEN="<jenkins-api-token>"
-$env:JENKINS_MCP_READ_ONLY="true"
+$env:JENKINS_MCP_ENABLE_PROTECTED_TOOLS="false"
 npx -y jenkins-gateway-mcp
 ```
 
@@ -158,7 +160,7 @@ macOS / Linux：
 export JENKINS_BASE_URL="https://jenkins.example.com/"
 export JENKINS_USER_ID="replace-with-jenkins-user-id"
 export JENKINS_API_TOKEN="<jenkins-api-token>"
-export JENKINS_MCP_READ_ONLY="true"
+export JENKINS_MCP_ENABLE_PROTECTED_TOOLS="false"
 npx -y jenkins-gateway-mcp
 ```
 
@@ -182,7 +184,8 @@ JENKINS_MCP_PROFILE = "example"
 JENKINS_BASE_URL = "https://jenkins.example.com/"
 JENKINS_USER_ID = "replace-with-jenkins-user-id"
 JENKINS_API_TOKEN = "<jenkins-api-token>"
-JENKINS_MCP_READ_ONLY = "true"
+JENKINS_MCP_ENABLE_PROTECTED_TOOLS = "false"
+JENKINS_MCP_PROTECTED_ALLOW_ALL = "false"
 ```
 
 这类本机配置不应提交到仓库。
@@ -203,7 +206,7 @@ node dist/cli.js
 
 ## 版本策略
 
-- `0.1.x`：只读工具、基础连接、console log。
+- `0.1.x`：普通只读工具、基础连接、受保护 console log。
 - `0.2.x`：带安全开关的构建触发与停止。
-- `0.3.x`：job allowlist、多 profile 配置、资源暴露。
-- `1.0.0`：API 稳定、文档完整、跨平台验证通过，可作为转公开和 npm 发布候选。
+- `0.3.x`：all/view/job 受保护权限、多 profile 配置、资源暴露。
+- `1.0.0`：shared core + CLI + MCP + Codex skill 新架构稳定、文档完整、跨平台验证通过，可作为转公开和 npm 发布候选。
