@@ -1,0 +1,46 @@
+{
+  "name": "jenkins-gateway-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local stdio MCP gateway for Jenkins HTTP API.",
+  "type": "module",
+  "bin": {
+    "jenkins-gateway-mcp": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "SECURITY.md",
+    "docs",
+    "config/environments/*.example.env",
+    ".env.example",
+    ".codex/jenkins-mcp.example.toml"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run test:unit && npm run test:integration",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "prepack": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "jenkins",
+    "codex",
+    "model-context-protocol"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}

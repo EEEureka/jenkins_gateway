@@ -1,0 +1,18 @@
+# Copy this into your local Codex config after the package exists.
+# Do not commit real tokens.
+
+[mcp_servers.jenkins]
+command = "npx"
+args = ["-y", "jenkins-gateway-mcp"]
+
+[mcp_servers.jenkins.env]
+JENKINS_MCP_PROFILE = "example"
+JENKINS_BASE_URL = "https://jenkins.example.com/"
+JENKINS_USER_ID = "replace-with-jenkins-user-id"
+JENKINS_API_TOKEN = "<local-token>"
+JENKINS_MCP_READ_ONLY = "true"
+JENKINS_MCP_ENABLE_MUTATIONS = "false"
+JENKINS_MCP_JOB_ALLOWLIST = ""
+JENKINS_MCP_REQUEST_TIMEOUT_MS = "30000"
+JENKINS_MCP_CONSOLE_MAX_CHARS = "20000"
+JENKINS_MCP_LOG_LEVEL = "info"
