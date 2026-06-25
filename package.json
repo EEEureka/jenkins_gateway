@@ -1,6 +1,6 @@
 {
   "name": "jenkins-gateway",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Local Jenkins HTTP API gateway with CLI and stdio MCP server.",
   "type": "module",
   "bin": {
@@ -9,7 +9,6 @@
   "files": [
     "dist",
     "README.md",
-    "README.zh.md",
     "SECURITY.md",
     "docs/manual.en.md",
     "docs/manual.zh.md",

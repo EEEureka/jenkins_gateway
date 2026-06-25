@@ -98,8 +98,6 @@ export JENKINS_API_TOKEN="<jenkins-api-token>"
 npx -y jenkins-gateway mcp stdio
 ```
 
-If the final npm package uses a scoped name, replace `jenkins-gateway` with the scoped package name.
-
 ## 4. Configuration
 
 Required variables:

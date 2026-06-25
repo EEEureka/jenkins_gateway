@@ -1,6 +1,6 @@
 # Jenkins Gateway 使用手册
 
-[中文 README](../README.zh.md) | [User Manual](manual.en.md)
+[README](../README.md) | [User Manual](manual.en.md)
 
 ## 1. 项目概览
 
@@ -97,8 +97,6 @@ export JENKINS_USER_ID="replace-with-jenkins-user-id"
 export JENKINS_API_TOKEN="<jenkins-api-token>"
 npx -y jenkins-gateway mcp stdio
 ```
-
-如果最终使用 scoped package，需要把 `jenkins-gateway` 替换成实际包名。
 
 ## 4. 配置
 
