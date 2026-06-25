@@ -5,6 +5,8 @@ export type JenkinsBuildParameterKind =
   | "extended-choice-checkbox"
   | "unknown";
 
+export type JenkinsBuildParameterSource = "job-api" | "build-page-html";
+
 export interface JenkinsBuildParameter {
   name: string;
   type?: string;
@@ -12,7 +14,25 @@ export interface JenkinsBuildParameter {
   description?: string;
   defaultValue?: unknown;
   choices?: string[];
-  source: "job-api" | "build-page-html";
+  source: JenkinsBuildParameterSource;
+  choicesSource?: JenkinsBuildParameterSource | "job-api-value";
+  choicesUnavailableReason?: string;
+  multiValue?: boolean;
+  delimiter?: string;
+}
+
+export interface ParameterVerificationMismatch {
+  name: string;
+  expected: string[];
+  actual: string[];
+  reason: "missing" | "empty" | "different";
+}
+
+export interface ParameterVerificationResult {
+  ok: boolean;
+  expected: Record<string, string[]>;
+  actual: Record<string, string[]>;
+  mismatches: ParameterVerificationMismatch[];
 }
 
 export function extractParameterDefinitions(job: Record<string, unknown>): JenkinsBuildParameter[] {
@@ -32,17 +52,23 @@ export function extractParameterDefinitions(job: Record<string, unknown>): Jenki
 
     const type = typeof definition.type === "string" ? definition.type : className(definition);
     const defaultParameterValue = isRecord(definition.defaultParameterValue) ? definition.defaultParameterValue.value : undefined;
+    const kind = classifyParameter(type, definition);
     const choices = readChoices(definition);
+    const expectsChoices = kind === "choice" || kind === "extended-choice-checkbox";
 
     return [
       {
         name,
         type,
-        kind: classifyParameter(type, definition),
+        kind,
         description: typeof definition.description === "string" ? definition.description : undefined,
         defaultValue: defaultParameterValue,
         choices: choices.length > 0 ? choices : undefined,
-        source: "job-api" as const
+        source: "job-api" as const,
+        choicesSource: choices.length > 0 ? readChoicesSource(definition) : undefined,
+        choicesUnavailableReason: choices.length === 0 && expectsChoices ? "job-api-no-choices" : undefined,
+        multiValue: isMultiValueParameter(type, definition),
+        delimiter: readDelimiter(definition)
       }
     ];
   });
@@ -62,7 +88,25 @@ export function mergeBuildPageChoices(parameters: JenkinsBuildParameter[], html:
     return {
       ...parameter,
       choices,
-      source: "build-page-html"
+      source: "build-page-html",
+      choicesSource: "build-page-html",
+      choicesUnavailableReason: undefined
+    };
+  });
+}
+
+export function markChoicesUnavailable(
+  parameters: JenkinsBuildParameter[],
+  reason: string
+): JenkinsBuildParameter[] {
+  return parameters.map((parameter) => {
+    if ((parameter.kind !== "choice" && parameter.kind !== "extended-choice-checkbox") || parameter.choices?.length) {
+      return parameter;
+    }
+
+    return {
+      ...parameter,
+      choicesUnavailableReason: reason
     };
   });
 }
@@ -87,10 +131,105 @@ export function validateBuildParameterValues(
   }
 }
 
+export function extractBuildParameterValues(build: Record<string, unknown>): Record<string, string[]> {
+  const values: Record<string, string[]> = {};
+  const actions = Array.isArray(build.actions) ? build.actions : [];
+
+  for (const action of actions) {
+    if (!isRecord(action) || !Array.isArray(action.parameters)) {
+      continue;
+    }
+
+    for (const parameter of action.parameters) {
+      if (!isRecord(parameter) || typeof parameter.name !== "string") {
+        continue;
+      }
+
+      values[parameter.name] = normalizeParameterValue(parameter.value);
+    }
+  }
+
+  return values;
+}
+
+export function verifyBuildParameterValues(
+  expectedValues: Record<string, string | number | boolean | string[]>,
+  build: Record<string, unknown>
+): ParameterVerificationResult {
+  const expected = Object.fromEntries(
+    Object.entries(expectedValues).map(([name, value]) => [name, normalizeParameterValue(value)])
+  );
+  const actual = extractBuildParameterValues(build);
+  const mismatches: ParameterVerificationMismatch[] = [];
+
+  for (const [name, expectedValue] of Object.entries(expected)) {
+    const actualValue = actual[name];
+    if (!actualValue) {
+      mismatches.push({
+        name,
+        expected: expectedValue,
+        actual: [],
+        reason: "missing"
+      });
+      continue;
+    }
+
+    if (actualValue.length === 0) {
+      mismatches.push({
+        name,
+        expected: expectedValue,
+        actual: actualValue,
+        reason: "empty"
+      });
+      continue;
+    }
+
+    if (!sameStringSet(expectedValue, actualValue)) {
+      mismatches.push({
+        name,
+        expected: expectedValue,
+        actual: actualValue,
+        reason: "different"
+      });
+    }
+  }
+
+  return {
+    ok: mismatches.length === 0,
+    expected,
+    actual,
+    mismatches
+  };
+}
+
+export function normalizeParameterValue(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => normalizeParameterValue(entry));
+  }
+
+  if (value === undefined || value === null) {
+    return [];
+  }
+
+  const stringValue = String(value);
+  if (!stringValue.trim()) {
+    return [];
+  }
+
+  return stringValue
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
 function classifyParameter(type: string | undefined, definition: Record<string, unknown>): JenkinsBuildParameterKind {
   const signature = `${type ?? ""} ${className(definition) ?? ""}`.toLowerCase();
 
-  if (signature.includes("extended") && signature.includes("choice")) {
+  if (
+    (signature.includes("extended") && signature.includes("choice")) ||
+    signature.includes("pt_checkbox") ||
+    signature.includes("checkbox")
+  ) {
     return "extended-choice-checkbox";
   }
 
@@ -110,11 +249,53 @@ function classifyParameter(type: string | undefined, definition: Record<string, 
 }
 
 function readChoices(definition: Record<string, unknown>): string[] {
-  if (!Array.isArray(definition.choices)) {
-    return [];
+  if (Array.isArray(definition.choices)) {
+    return definition.choices.map(String).filter(Boolean);
   }
 
-  return definition.choices.map(String).filter(Boolean);
+  if (typeof definition.value === "string") {
+    return splitDelimitedValues(definition.value, readDelimiter(definition));
+  }
+
+  return [];
+}
+
+function readChoicesSource(definition: Record<string, unknown>): JenkinsBuildParameter["choicesSource"] {
+  return Array.isArray(definition.choices) ? "job-api" : "job-api-value";
+}
+
+function readDelimiter(definition: Record<string, unknown>): string | undefined {
+  const rawDelimiter =
+    typeof definition.multiSelectDelimiter === "string"
+      ? definition.multiSelectDelimiter
+      : typeof definition.delimiter === "string"
+        ? definition.delimiter
+        : undefined;
+
+  return rawDelimiter || undefined;
+}
+
+function isMultiValueParameter(type: string | undefined, definition: Record<string, unknown>): boolean | undefined {
+  const signature = `${type ?? ""} ${className(definition) ?? ""}`.toLowerCase();
+  if (signature.includes("pt_checkbox") || signature.includes("checkbox")) {
+    return true;
+  }
+
+  if (typeof definition.multiSelectDelimiter === "string") {
+    return true;
+  }
+
+  return undefined;
+}
+
+function splitDelimitedValues(value: string, delimiter: string | undefined): string[] {
+  const normalizedDelimiter = delimiter === "\\n" ? "\n" : delimiter;
+  const pattern = normalizedDelimiter ? escapeRegExp(normalizedDelimiter) : "[,\\n]";
+
+  return value
+    .split(new RegExp(pattern))
+    .map((entry) => entry.trim())
+    .filter(Boolean);
 }
 
 function extractChoicesFromBuildPage(html: string, parameterName: string): string[] {
@@ -155,4 +336,17 @@ function decodeHtmlEntities(value: string): string {
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">");
+}
+
+function sameStringSet(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  const rightValues = new Set(right);
+  return left.every((entry) => rightValues.has(entry));
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

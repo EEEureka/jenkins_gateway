@@ -192,7 +192,12 @@ export function registerJenkinsTools(server: McpServer, context: ToolContext): v
       description: "Trigger a Jenkins build. Disabled unless protected-tool settings permit it.",
       inputSchema: {
         jobPath: z.string().min(1),
-        parameters: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.array(z.string())])).optional()
+        parameters: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.array(z.string())])).optional(),
+        submitMode: z.enum(["auto", "urlencoded", "jenkins-form"]).default("auto"),
+        waitForStart: z.boolean().default(false),
+        verifyParameters: z.boolean().default(false),
+        timeoutSeconds: z.number().positive().optional(),
+        intervalSeconds: z.number().positive().optional()
       },
       annotations: {
         readOnlyHint: false,
@@ -201,7 +206,17 @@ export function registerJenkinsTools(server: McpServer, context: ToolContext): v
         openWorldHint: true
       }
     },
-    async ({ jobPath, parameters }) => toToolResult(await context.client.triggerBuild(jobPath, parameters), context.secrets)
+    async ({ jobPath, parameters, submitMode, waitForStart, verifyParameters, timeoutSeconds, intervalSeconds }) =>
+      toToolResult(
+        await context.client.triggerBuild(jobPath, parameters, {
+          submitMode,
+          waitForStart: waitForStart || verifyParameters,
+          verifyParameters,
+          timeoutMs: timeoutSeconds === undefined ? undefined : Math.ceil(timeoutSeconds * 1000),
+          intervalMs: intervalSeconds === undefined ? undefined : Math.ceil(intervalSeconds * 1000)
+        }),
+        context.secrets
+      )
   );
 
   server.registerTool(

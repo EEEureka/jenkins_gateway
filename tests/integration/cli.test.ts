@@ -1,5 +1,8 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -123,9 +126,55 @@ describe("cli", () => {
       parameters: [
         {
           name: "serviceList",
+          kind: "extended-choice-checkbox",
           choices: ["MACC-FRONT-RELEASE", "OCE-RELEASE"]
         }
       ]
+    });
+  });
+
+  it("reads build and queue state as JSON", async () => {
+    mockJenkins = await startMockJenkins();
+
+    const env = {
+      JENKINS_BASE_URL: mockJenkins.baseUrl,
+      JENKINS_USER_ID: "alice",
+      JENKINS_API_TOKEN: "super-secret"
+    };
+
+    const buildResult = await runCli(["build", "get", "upgrade/deploy", "7", "--json"], env);
+    expect(buildResult.code).toBe(0);
+    expect(JSON.parse(buildResult.stdout)).toMatchObject({
+      number: 7,
+      result: "SUCCESS",
+      actions: [
+        {
+          parameters: [
+            {
+              name: "serviceList",
+              value: "MACC-FRONT-RELEASE"
+            }
+          ]
+        }
+      ]
+    });
+
+    const queueResult = await runCli(["queue", "get", "201", "--json"], env);
+    expect(queueResult.code).toBe(0);
+    expect(JSON.parse(queueResult.stdout)).toMatchObject({
+      id: 201,
+      executable: {
+        number: 7
+      }
+    });
+
+    const queueWaitResult = await runCli(["queue", "wait", "201", "--interval-seconds", "0.01", "--json"], env);
+    expect(queueWaitResult.code).toBe(0);
+    expect(JSON.parse(queueWaitResult.stdout)).toMatchObject({
+      queueId: 201,
+      executable: {
+        number: 7
+      }
     });
   });
 
@@ -148,6 +197,106 @@ describe("cli", () => {
     });
     expect(mockJenkins.requests.filter((request) => request.method === "POST")).toHaveLength(1);
     expect(mockJenkins.requests.find((request) => request.method === "POST")?.body).toBe("branch=main");
+  });
+
+  it("verifies parameterized build trigger values after queue execution starts", async () => {
+    mockJenkins = await startMockJenkins();
+
+    const result = await runCli(
+      [
+        "build",
+        "trigger",
+        "upgrade/deploy",
+        "--param",
+        "serviceList=MACC-FRONT-RELEASE",
+        "--verify-parameters",
+        "--interval-seconds",
+        "0.01",
+        "--json"
+      ],
+      {
+        JENKINS_BASE_URL: mockJenkins.baseUrl,
+        JENKINS_USER_ID: "alice",
+        JENKINS_API_TOKEN: "super-secret",
+        JENKINS_MCP_ENABLE_PROTECTED_TOOLS: "true",
+        JENKINS_MCP_PROTECTED_VIEW_ALLOWLIST: "release"
+      }
+    );
+
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      jobPath: "upgrade/deploy",
+      queued: true,
+      submitMode: "jenkins-form",
+      queueId: 201,
+      buildNumber: 7,
+      parameterVerification: {
+        ok: true
+      }
+    });
+
+    const buildRequest = mockJenkins.requests.find(
+      (request) => request.method === "POST" && request.url === "/job/upgrade/job/deploy/build"
+    );
+    expect(buildRequest?.body).toContain("json=");
+    expect(buildRequest?.body).toContain("MACC-FRONT-RELEASE");
+  });
+
+  it("fails verification when Jenkins accepts the queue item but drops a parameter", async () => {
+    mockJenkins = await startMockJenkins();
+
+    const result = await runCli(
+      [
+        "build",
+        "trigger",
+        "upgrade/deploy",
+        "--submit-mode",
+        "urlencoded",
+        "--param",
+        "serviceList=MACC-FRONT-RELEASE",
+        "--verify-parameters",
+        "--interval-seconds",
+        "0.01",
+        "--json"
+      ],
+      {
+        JENKINS_BASE_URL: mockJenkins.baseUrl,
+        JENKINS_USER_ID: "alice",
+        JENKINS_API_TOKEN: "super-secret",
+        JENKINS_MCP_ENABLE_PROTECTED_TOOLS: "true",
+        JENKINS_MCP_PROTECTED_VIEW_ALLOWLIST: "release"
+      }
+    );
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("Jenkins build parameter verification failed");
+    expect(result.stderr).toContain("serviceList expected=MACC-FRONT-RELEASE actual=<empty>");
+  });
+
+  it("installs the bundled workflow skill without Jenkins credentials", async () => {
+    const workspaceRoot = await mkdtemp(path.join(tmpdir(), "jenkins-gateway-cli-"));
+
+    try {
+      const result = await runCli(
+        ["skill", "install", "jenkins-workflow", "--platform", "codex", "--scope", "project", "--json"],
+        {},
+        workspaceRoot
+      );
+
+      expect(result.code).toBe(0);
+      expect(result.stderr).toBe("");
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        skillName: "jenkins-workflow",
+        platform: "codex",
+        scope: "project",
+        installed: true
+      });
+      await expect(readFile(path.join(workspaceRoot, ".agents", "skills", "jenkins-workflow", "SKILL.md"), "utf8")).resolves.toContain(
+        "name: jenkins-workflow"
+      );
+    } finally {
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
   });
 
   it("runs the upgrade-component workflow as JSON", async () => {
@@ -203,10 +352,11 @@ describe("cli", () => {
 
 async function runCli(
   args: string[],
-  envOverrides: Record<string, string>
+  envOverrides: Record<string, string>,
+  cwd = process.cwd()
 ): Promise<{ code: number | null; stdout: string; stderr: string }> {
-  const child = spawn(process.execPath, ["dist/cli.js", ...args], {
-    cwd: process.cwd(),
+  const child = spawn(process.execPath, [path.join(process.cwd(), "dist", "cli.js"), ...args], {
+    cwd,
     env: {
       ...process.env,
       ...envOverrides

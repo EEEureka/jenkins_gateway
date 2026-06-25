@@ -1,3 +1,9 @@
+---
+name: jenkins-workflow
+description: Use this skill for Jenkins operations through the jenkins-gateway CLI, especially release, stage, component upgrade, build status, queue status, and parameterized build workflows.
+disable-model-invocation: true
+---
+
 # Jenkins Workflow Skill
 
 Use this skill when an agent needs to operate Jenkins through this repository's `jenkins-gateway` CLI, especially for release, stage, component upgrade, or parameterized build workflows.
@@ -23,7 +29,9 @@ jenkins-gateway view list --json
 jenkins-gateway view get "example-release-view" --json
 jenkins-gateway job list --view "example-release-view" --json
 jenkins-gateway job params "example-upgrade-job" --json
-jenkins-gateway build trigger "example-job" --param key=value --json
+jenkins-gateway build get "example-job" 123 --json
+jenkins-gateway queue get 123 --json
+jenkins-gateway build trigger "example-job" --param key=value --verify-parameters --json
 ```
 
 For component upgrade workflows, prefer the bundled workflow command:
@@ -50,3 +58,5 @@ For a component upgrade:
 3. Read the upgrade job parameters and verify the component is an accepted value when choices are available.
 4. Trigger the upgrade job through `workflow upgrade-component`.
 5. If `--wait` is used, report queue id, build number, and final build result.
+
+For direct parameterized triggers, prefer `--verify-parameters` so the CLI fails when Jenkins accepts the queue item but the executable build does not contain the submitted values.

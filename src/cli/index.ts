@@ -3,7 +3,9 @@ import type { Writable } from "node:stream";
 import { runBuildCommand } from "./commands/build.js";
 import { runJobCommand } from "./commands/job.js";
 import { runMcpStdio } from "./commands/mcp.js";
+import { runQueueCommand } from "./commands/queue.js";
 import { runServerInfo } from "./commands/server-info.js";
+import { runSkillCommand } from "./commands/skill.js";
 import { runViewCommand } from "./commands/view.js";
 import { runWorkflowCommand } from "./commands/workflow.js";
 import { CliUsageError, removeFlag, requireNoArgs } from "./options.js";
@@ -76,10 +78,20 @@ async function dispatch(args: string[], env: NodeJS.ProcessEnv, stdout: Writable
     return;
   }
 
+  if (group === "queue") {
+    await runQueueCommand(args, env, stdout);
+    return;
+  }
+
+  if (group === "skill") {
+    await runSkillCommand(args, stdout);
+    return;
+  }
+
   if (group === "workflow") {
     await runWorkflowCommand(args, env, stdout);
     return;
   }
 
-  throw new CliUsageError("Expected command group: mcp, server, job, view, build, or workflow");
+  throw new CliUsageError("Expected command group: mcp, server, job, view, build, queue, skill, or workflow");
 }

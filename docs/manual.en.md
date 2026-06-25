@@ -125,7 +125,21 @@ Optional variables:
 
 Choose a local configuration method for credentials, such as shell environment variables or the MCP client's environment block.
 
-## 5. Codex MCP Configuration
+## 5. MCP Client Configuration
+
+MCP mode is for agent clients that support the Model Context Protocol. It exposes Jenkins tools to the client, but it does not install the bundled CLI skill or make the shell command globally available.
+
+Platform references: [Claude Code MCP](https://code.claude.com/docs/en/mcp), [Cursor MCP](https://cursor.com/docs/mcp), and [VS Code MCP](https://code.visualstudio.com/docs/agent-customization/mcp-servers).
+
+The recommended stdio server command is:
+
+```bash
+npx -y jenkins-gateway mcp stdio
+```
+
+### 5.1 Codex
+
+Configure Codex with a local MCP server entry.
 
 Source checkout:
 
@@ -159,6 +173,92 @@ JENKINS_MCP_ENABLE_PROTECTED_TOOLS = "false"
 JENKINS_MCP_PROTECTED_ALLOW_ALL = "false"
 ```
 
+### 5.2 Claude Code
+
+Claude Code can add local stdio MCP servers with `claude mcp add` or a project/user `.mcp.json` file.
+
+CLI example:
+
+```bash
+claude mcp add \
+  --env JENKINS_MCP_PROFILE=example \
+  --env JENKINS_BASE_URL=https://jenkins.example.com/ \
+  --env JENKINS_USER_ID=replace-with-jenkins-user-id \
+  --env JENKINS_API_TOKEN=<jenkins-api-token> \
+  --env JENKINS_MCP_ENABLE_PROTECTED_TOOLS=false \
+  --transport stdio \
+  jenkins-gateway -- npx -y jenkins-gateway mcp stdio
+```
+
+Shared `.mcp.json` example:
+
+```json
+{
+  "mcpServers": {
+    "jenkins-gateway": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "jenkins-gateway", "mcp", "stdio"],
+      "env": {
+        "JENKINS_MCP_PROFILE": "example",
+        "JENKINS_BASE_URL": "https://jenkins.example.com/",
+        "JENKINS_USER_ID": "replace-with-jenkins-user-id",
+        "JENKINS_API_TOKEN": "<jenkins-api-token>",
+        "JENKINS_MCP_ENABLE_PROTECTED_TOOLS": "false"
+      }
+    }
+  }
+}
+```
+
+### 5.3 Cursor
+
+Cursor supports project-level `.cursor/mcp.json` and user-level `~/.cursor/mcp.json` files.
+
+```json
+{
+  "mcpServers": {
+    "jenkins-gateway": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "jenkins-gateway", "mcp", "stdio"],
+      "env": {
+        "JENKINS_MCP_PROFILE": "example",
+        "JENKINS_BASE_URL": "https://jenkins.example.com/",
+        "JENKINS_USER_ID": "replace-with-jenkins-user-id",
+        "JENKINS_API_TOKEN": "<jenkins-api-token>",
+        "JENKINS_MCP_ENABLE_PROTECTED_TOOLS": "false"
+      }
+    }
+  }
+}
+```
+
+### 5.4 VS Code
+
+VS Code uses `mcp.json` files. For a workspace configuration, create `.vscode/mcp.json`. For a user configuration, use the MCP: Open User Configuration command.
+
+```json
+{
+  "servers": {
+    "jenkins-gateway": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "jenkins-gateway", "mcp", "stdio"],
+      "env": {
+        "JENKINS_MCP_PROFILE": "example",
+        "JENKINS_BASE_URL": "https://jenkins.example.com/",
+        "JENKINS_USER_ID": "replace-with-jenkins-user-id",
+        "JENKINS_API_TOKEN": "<jenkins-api-token>",
+        "JENKINS_MCP_ENABLE_PROTECTED_TOOLS": "false"
+      }
+    }
+  }
+}
+```
+
+### 5.5 Protected MCP Access
+
 For protected write access, enable the master switch and add explicit allow rules:
 
 ```toml
@@ -169,14 +269,105 @@ JENKINS_MCP_PROTECTED_VIEW_ALLOWLIST = "example-release-view,example-stage-view"
 JENKINS_MCP_PROTECTED_JOB_DENYLIST = "example-danger-job"
 ```
 
-## 6. CLI Reference
+Use the same environment variables in JSON-based clients:
+
+```json
+{
+  "JENKINS_MCP_ENABLE_PROTECTED_TOOLS": "true",
+  "JENKINS_MCP_PROTECTED_ALLOW_ALL": "false",
+  "JENKINS_MCP_PROTECTED_VIEW_ALLOWLIST": "example-release-view,example-stage-view",
+  "JENKINS_MCP_PROTECTED_JOB_DENYLIST": "example-danger-job"
+}
+```
+
+## 6. CLI And Skill Configuration
+
+CLI mode is separate from MCP mode. It is for shells, scripts, CI jobs, and agent platforms that can run terminal commands. It does not require MCP client configuration.
+
+### 6.1 Direct CLI Usage
+
+Use either a global install:
+
+```bash
+npm install -g jenkins-gateway
+jenkins-gateway server info --json
+```
+
+Or run through npx:
+
+```bash
+JENKINS_BASE_URL="https://jenkins.example.com/" \
+JENKINS_USER_ID="replace-with-jenkins-user-id" \
+JENKINS_API_TOKEN="<jenkins-api-token>" \
+npx -y jenkins-gateway server info --json
+```
+
+On Windows PowerShell:
+
+```powershell
+$env:JENKINS_BASE_URL="https://jenkins.example.com/"
+$env:JENKINS_USER_ID="replace-with-jenkins-user-id"
+$env:JENKINS_API_TOKEN="<jenkins-api-token>"
+npx -y jenkins-gateway server info --json
+```
+
+### 6.2 Agent Skill Installation
+
+Installing or mounting the MCP server does not automatically install the bundled `jenkins-workflow` skill in Codex, Claude Code, Cursor, VS Code, or other agent platforms. MCP tools and agent skills are separate integration layers.
+
+This package includes a portable skill at `skills/jenkins-workflow/`. The recommended installation path is the bundled installer:
+
+```bash
+npx -y jenkins-gateway skill install jenkins-workflow --platform codex --scope project
+```
+
+The installer copies the bundled skill to the target platform's skill root. It does not modify Jenkins credentials, MCP client configuration, or shell startup files.
+
+Common installer commands:
+
+| Platform | Project-level command | User-level command |
+| --- | --- | --- |
+| Codex | `npx -y jenkins-gateway skill install jenkins-workflow --platform codex --scope project` | `npx -y jenkins-gateway skill install jenkins-workflow --platform codex --scope user` |
+| Claude Code | `npx -y jenkins-gateway skill install jenkins-workflow --platform claude --scope project` | `npx -y jenkins-gateway skill install jenkins-workflow --platform claude --scope user` |
+| Cursor | `npx -y jenkins-gateway skill install jenkins-workflow --platform cursor --scope project` | `npx -y jenkins-gateway skill install jenkins-workflow --platform cursor --scope user` |
+| VS Code / GitHub Copilot | `npx -y jenkins-gateway skill install jenkins-workflow --platform vscode --scope project` | `npx -y jenkins-gateway skill install jenkins-workflow --platform vscode --scope user` |
+
+Installer options:
+
+```bash
+jenkins-gateway skill list --json
+jenkins-gateway skill install jenkins-workflow --platform codex --scope project --dry-run --json
+jenkins-gateway skill install jenkins-workflow --platform codex --scope project --force --json
+jenkins-gateway skill install jenkins-workflow --target .agents/skills --json
+```
+
+`--target` overrides the platform default and points to the parent skill root; the installer creates `<target>/jenkins-workflow/`.
+
+Platform references: [Codex Agent Skills](https://developers.openai.com/codex/skills), [Claude Code skills](https://code.claude.com/docs/en/skills), [Cursor skills](https://cursor.com/docs/skills), and [VS Code Agent Skills](https://code.visualstudio.com/docs/agent-customization/agent-skills).
+
+Common locations:
+
+| Platform | Project-level skill location | User-level skill location |
+| --- | --- | --- |
+| Codex | `.agents/skills/jenkins-workflow/` | `~/.agents/skills/jenkins-workflow/` |
+| Claude Code | `.claude/skills/jenkins-workflow/` | `~/.claude/skills/jenkins-workflow/` |
+| Cursor | `.cursor/skills/jenkins-workflow/` | `~/.cursor/skills/jenkins-workflow/` |
+| VS Code / GitHub Copilot | `.github/skills/jenkins-workflow/` | `~/.copilot/skills/jenkins-workflow/` |
+
+The skill guides agents to use the CLI safely. It does not grant Jenkins access by itself; credentials and protected-tool authorization still come from local environment variables or MCP/CLI configuration.
+
+The bundled skill is configured with `disable-model-invocation: true`, so skills-compatible clients should treat it as an explicit workflow skill. In Codex, invoke it explicitly with `$jenkins-workflow` or inspect available skills with `/skills`. In clients that support slash-command skills, use `/jenkins-workflow`. Remove or change that frontmatter field only if you want the agent to auto-load the skill based on conversation relevance.
+
+## 7. CLI Reference
 
 All commands write JSON to stdout. Errors are written to stderr.
 
-Start MCP server:
+Skill installer:
 
 ```bash
-jenkins-gateway mcp stdio
+jenkins-gateway skill list --json
+jenkins-gateway skill install jenkins-workflow --platform codex --scope project --json
+jenkins-gateway skill install jenkins-workflow --platform codex --scope user --json
 ```
 
 Server probe:
@@ -207,9 +398,24 @@ Build trigger:
 ```bash
 jenkins-gateway build trigger "example-job" --json
 jenkins-gateway build trigger "example-upgrade-job" --param serviceList=example-component --json
+jenkins-gateway build trigger "example-upgrade-job" \
+  --param serviceList=example-component \
+  --verify-parameters \
+  --json
+jenkins-gateway build get "example-job" 123 --json
+jenkins-gateway build wait "example-job" 123 --json
 ```
 
 Build trigger is a protected operation. It is denied unless protected-tool settings allow the target job.
+Use `--verify-parameters` for parameterized jobs that must prove submitted values landed in the executable build.
+Use repeated `--param name=value` or `--param-json '{"name":["a","b"]}'` for multi-value parameters.
+
+Queue:
+
+```bash
+jenkins-gateway queue get 123 --json
+jenkins-gateway queue wait 123 --json
+```
 
 Workflow:
 
@@ -224,7 +430,7 @@ jenkins-gateway workflow upgrade-component \
 
 The workflow checks the compile build, validates the upgrade job parameter value, triggers the upgrade job, optionally waits for queue/build completion, and prints a JSON summary.
 
-## 7. MCP Tools
+## 8. MCP Tools
 
 | Tool | Type | Description |
 | --- | --- | --- |
@@ -240,7 +446,7 @@ The workflow checks the compile build, validates the upgrade job parameter value
 | `jenkins.trigger_build` | protected write | Trigger a Jenkins build. |
 | `jenkins.stop_build` | protected write | Stop a Jenkins build. |
 
-## 8. Protected Tool Rules
+## 9. Protected Tool Rules
 
 Protected tools are:
 
@@ -267,7 +473,7 @@ This means:
 
 Console log is protected even though it is a read operation because console output may contain secrets. The gateway does not redact console content, but it limits response size.
 
-## 9. Jenkins API Details
+## 10. Jenkins API Details
 
 Authentication uses Jenkins Basic Auth:
 
@@ -290,15 +496,19 @@ The gateway converts that form to Jenkins URL segments:
 
 Each path segment is encoded independently, so spaces, non-ASCII names, and folder separators remain unambiguous.
 
-## 10. Parameter Handling
+## 11. Parameter Handling
 
-`job params` and `jenkins.get_build_parameters` read parameters from the Jenkins job API. For parameters without choices, the gateway also tries to read the Jenkins build page to extract choices, including Extended Choice checkbox values.
+`job params` and `jenkins.get_build_parameters` read parameters from the Jenkins job API. For Extended Choice parameters, the gateway first tries Jenkins job API fields such as `value` and `multiSelectDelimiter`; when choices are still missing, it also tries to read the Jenkins build page to extract checkbox and option values.
 
-If the build page returns `404` or `405`, the gateway falls back to the job API parameter definitions. Authentication failures and server errors are still reported.
+If the build page returns `404` or `405`, the gateway falls back to the job API parameter definitions and returns `choicesUnavailableReason`. Authentication failures and server errors are still reported.
 
 Before a parameterized trigger, known choice values are validated. Invalid values are rejected before sending Jenkins POST.
 
-## 11. Security And Logging
+Parameterized trigger defaults to `--submit-mode auto`. Auto mode uses normal `buildWithParameters` for ordinary parameters and Jenkins form-compatible submission for Extended Choice checkbox parameters. You can force `--submit-mode urlencoded` or `--submit-mode jenkins-form` when diagnosing Jenkins plugin behavior.
+
+`--verify-parameters` waits for the queue item to expose an executable build, reads `actions[].parameters[]`, and fails if submitted values are missing, empty, or different.
+
+## 12. Security And Logging
 
 - Store Jenkins credentials in environment variables or local MCP client configuration.
 - Normal structured outputs redact configured API tokens.
@@ -307,7 +517,7 @@ Before a parameterized trigger, known choice values are validated. Invalid value
 - Console log content is not redacted and should be treated as protected data.
 - Rotate a Jenkins token if it is exposed in screenshots, logs, issue text, or chat.
 
-## 12. Troubleshooting
+## 13. Troubleshooting
 
 `JENKINS_BASE_URL is required`
 
@@ -320,6 +530,10 @@ Before a parameterized trigger, known choice values are validated. Invalid value
 `Invalid Jenkins parameter value`
 
 : The submitted value is not in the known Jenkins choices. Run `jenkins-gateway job params "<job>" --json` first.
+
+`Jenkins build parameter verification failed`
+
+: Jenkins accepted the queue item, but the executable build did not contain the submitted parameter values. Retry with `--submit-mode jenkins-form`, inspect `jenkins-gateway build get "<job>" <build> --json`, and compare the job's `job params` output with the Jenkins build form.
 
 `405 Method Not Allowed` while reading build parameters
 

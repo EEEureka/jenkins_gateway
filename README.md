@@ -12,6 +12,7 @@ The gateway runs on the user's machine, reads Jenkins credentials from local env
 - CLI entrypoints for local scripts, CI, and Codex skills.
 - MCP stdio server for Codex and other MCP clients.
 - Codex skill content for repeatable Jenkins workflows.
+- Skill installer for Codex, Claude Code, Cursor, and VS Code.
 
 ## Requirements
 
@@ -73,33 +74,31 @@ export JENKINS_API_TOKEN="<jenkins-api-token>"
 npx -y jenkins-gateway mcp stdio
 ```
 
-## Codex MCP Configuration
+## Quick MCP Configuration
 
-Source checkout configuration:
+Use MCP mode when the agent platform supports local stdio MCP servers. The server command is:
 
-```toml
-[mcp_servers.jenkins]
-command = "node"
-args = ["D:/path/to/jenkins_gateway/dist/cli.js", "mcp", "stdio"]
-
-[mcp_servers.jenkins.env]
-JENKINS_MCP_PROFILE = "example"
-JENKINS_BASE_URL = "https://jenkins.example.com/"
-JENKINS_USER_ID = "replace-with-jenkins-user-id"
-JENKINS_API_TOKEN = "<jenkins-api-token>"
-JENKINS_MCP_ENABLE_PROTECTED_TOOLS = "false"
-JENKINS_MCP_PROTECTED_ALLOW_ALL = "false"
+```bash
+npx -y jenkins-gateway mcp stdio
 ```
 
-npx package configuration:
+Configure Jenkins credentials in the MCP client's environment block. See the manual for Codex, Claude Code, Cursor, and VS Code examples.
 
-```toml
-[mcp_servers.jenkins]
-command = "npx"
-args = ["-y", "jenkins-gateway", "mcp", "stdio"]
+## Quick CLI Configuration
+
+Use CLI mode when the agent platform can run shell commands directly:
+
+```bash
+npx -y jenkins-gateway server info --json
 ```
 
-Put Jenkins credentials in the local Codex MCP environment block or in the shell environment that starts Codex.
+The bundled `jenkins-workflow` skill is not installed automatically by MCP or npx. Install it separately when you want skill-guided CLI workflows:
+
+```bash
+npx -y jenkins-gateway skill install jenkins-workflow --platform codex --scope project
+```
+
+Use `--platform claude`, `--platform cursor`, or `--platform vscode` for other agent platforms. Use `--scope user` for a user-level installation.
 
 ## Capabilities
 
@@ -108,10 +107,12 @@ Read-only operations are enabled by default:
 - Probe server connectivity.
 - List Jenkins views and jobs.
 - Read job metadata, build metadata, queue items, and build parameters.
+- Inspect build and queue state from the CLI.
 
 Protected operations are denied by default and require explicit authorization:
 
 - Trigger builds.
+- Trigger parameterized builds with optional parameter verification.
 - Stop builds.
 - Read console logs.
 

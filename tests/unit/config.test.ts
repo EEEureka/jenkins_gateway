@@ -22,6 +22,7 @@ describe("loadConfig", () => {
 
   it("rejects missing required settings", () => {
     expect(() => loadConfig({})).toThrow(ConfigError);
+    expect(() => loadConfig({})).toThrow("JENKINS_BASE_URL is required; JENKINS_USER_ID is required; JENKINS_API_TOKEN is required");
   });
 });
 

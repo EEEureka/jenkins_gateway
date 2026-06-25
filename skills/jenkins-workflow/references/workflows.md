@@ -26,6 +26,17 @@ Expected behavior:
 - Triggers the upgrade job with the selected parameter.
 - When waiting is enabled, follows the queue item to the executable build and waits for final result.
 
+For direct parameterized build triggers outside this workflow, prefer:
+
+```bash
+jenkins-gateway build trigger "example-upgrade-job" \
+  --param serviceList=example-component \
+  --verify-parameters \
+  --json
+```
+
+The verification step reads the executable build's `actions[].parameters[]` and fails if Jenkins accepted the queue item but dropped or emptied a submitted parameter.
+
 ## Authorization
 
 Protected tools are controlled by:

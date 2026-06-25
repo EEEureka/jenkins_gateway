@@ -42,6 +42,14 @@ const envSchema = z.object({
 });
 
 export function loadConfig(source: NodeJS.ProcessEnv = process.env): JenkinsGatewayConfig {
+  const missingRequiredVariables = ["JENKINS_BASE_URL", "JENKINS_USER_ID", "JENKINS_API_TOKEN"].filter((name) => {
+    const value = source[name];
+    return typeof value !== "string" || value.trim() === "";
+  });
+  if (missingRequiredVariables.length > 0) {
+    throw new ConfigError(missingRequiredVariables.map((name) => `${name} is required`).join("; "));
+  }
+
   const parsed = envSchema.safeParse(source);
   if (!parsed.success) {
     const message = parsed.error.issues.map((issue) => issue.message).join("; ");

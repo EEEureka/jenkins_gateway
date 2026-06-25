@@ -5,4 +5,5 @@ export * from "./jenkins-client.js";
 export * from "./job-paths.js";
 export * from "./parameters.js";
 export * from "./redaction.js";
+export * from "./skill-installer.js";
 export * from "./workflows.js";

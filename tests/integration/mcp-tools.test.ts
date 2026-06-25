@@ -201,7 +201,8 @@ describe("read-only Jenkins tools", () => {
             {
               name: "serviceList",
               choices: ["MACC-FRONT-RELEASE", "OCE-RELEASE"],
-              source: "build-page-html"
+              source: "job-api",
+              choicesSource: "job-api-value"
             }
           ]
         }
@@ -219,7 +220,8 @@ describe("read-only Jenkins tools", () => {
           parameters: [
             {
               name: "serviceList",
-              source: "job-api"
+              source: "job-api",
+              choicesUnavailableReason: "build-page-405"
             }
           ]
         }

@@ -230,8 +230,10 @@ async function handleRequest(
               parameterDefinitions: [
                 {
                   name: "serviceList",
-                  type: "ExtendedChoiceParameterDefinition",
-                  _class: "com.cwctravel.hudson.plugins.extended_choice_parameter.ExtendedChoiceParameterDefinition"
+                  type: "PT_CHECKBOX",
+                  _class: "com.cwctravel.hudson.plugins.extended_choice_parameter.ExtendedChoiceParameterDefinition",
+                  value: "MACC-FRONT-RELEASE,OCE-RELEASE",
+                  multiSelectDelimiter: ","
                 }
               ]
             }
@@ -295,7 +297,43 @@ async function handleRequest(
           result: "SUCCESS",
           building: false,
           duration: 3000,
-          url: "http://jenkins/job/upgrade/job/deploy/7/"
+          url: "http://jenkins/job/upgrade/job/deploy/7/",
+          actions: [
+            {
+              parameters: [
+                {
+                  name: "serviceList",
+                  value: "MACC-FRONT-RELEASE"
+                }
+              ]
+            }
+          ]
+        })
+      );
+      return;
+    }
+
+    if (request.url?.startsWith("/job/upgrade/job/deploy/8/api/json")) {
+      response.writeHead(200, {
+        "content-type": "application/json"
+      });
+      response.end(
+        JSON.stringify({
+          number: 8,
+          result: "SUCCESS",
+          building: false,
+          duration: 3000,
+          url: "http://jenkins/job/upgrade/job/deploy/8/",
+          actions: [
+            {
+              parameters: [
+                {
+                  name: "serviceList",
+                  value: ""
+                }
+              ]
+            }
+          ]
         })
       );
       return;
@@ -323,6 +361,30 @@ async function handleRequest(
           "content-type": "text/plain"
         });
         response.end("missing crumb");
+        return;
+      }
+
+      response.writeHead(201, {
+        location: "/queue/item/202/"
+      });
+      response.end("");
+      return;
+    }
+
+    if (request.method === "POST" && request.url === "/job/upgrade/job/deploy/build") {
+      if (request.headers["jenkins-crumb"] !== "crumb-value") {
+        response.writeHead(403, {
+          "content-type": "text/plain"
+        });
+        response.end("missing crumb");
+        return;
+      }
+
+      if (!body.includes("json=") || !body.includes("MACC-FRONT-RELEASE")) {
+        response.writeHead(400, {
+          "content-type": "text/plain"
+        });
+        response.end("missing form json");
         return;
       }
 
@@ -375,6 +437,24 @@ async function handleRequest(
           executable: {
             number: 7,
             url: "http://jenkins/job/upgrade/job/deploy/7/"
+          }
+        })
+      );
+      return;
+    }
+
+    if (request.url === "/queue/item/202/api/json") {
+      response.writeHead(200, {
+        "content-type": "application/json"
+      });
+      response.end(
+        JSON.stringify({
+          id: 202,
+          blocked: false,
+          buildable: false,
+          executable: {
+            number: 8,
+            url: "http://jenkins/job/upgrade/job/deploy/8/"
           }
         })
       );

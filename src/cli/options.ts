@@ -61,8 +61,10 @@ export function requirePositional(value: string | undefined, name: string): stri
   return value;
 }
 
-export function parseParameterEntries(entries: string[]): Record<string, string> {
-  const parameters: Record<string, string> = {};
+export type CliParameterValue = string | number | boolean | string[];
+
+export function parseParameterEntries(entries: string[]): Record<string, CliParameterValue> {
+  const parameters: Record<string, CliParameterValue> = {};
 
   for (const entry of entries) {
     const separatorIndex = entry.indexOf("=");
@@ -75,8 +77,79 @@ export function parseParameterEntries(entries: string[]): Record<string, string>
       throw new CliUsageError(`--param key must not be empty: ${entry}`);
     }
 
-    parameters[key] = entry.slice(separatorIndex + 1);
+    appendParameterValue(parameters, key, entry.slice(separatorIndex + 1));
   }
 
   return parameters;
+}
+
+export function parseParameterJson(value: string | undefined): Record<string, CliParameterValue> {
+  if (value === undefined) {
+    return {};
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch (error) {
+    throw new CliUsageError(`--param-json must be valid JSON: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new CliUsageError("--param-json must be a JSON object");
+  }
+
+  const parameters: Record<string, CliParameterValue> = {};
+  for (const [key, rawValue] of Object.entries(parsed)) {
+    if (!key.trim()) {
+      throw new CliUsageError("--param-json keys must not be empty");
+    }
+
+    if (typeof rawValue === "string" || typeof rawValue === "number" || typeof rawValue === "boolean") {
+      parameters[key] = rawValue;
+      continue;
+    }
+
+    if (Array.isArray(rawValue) && rawValue.every((entry) => typeof entry === "string")) {
+      parameters[key] = rawValue;
+      continue;
+    }
+
+    throw new CliUsageError(`--param-json value for ${key} must be a string, number, boolean, or string array`);
+  }
+
+  return parameters;
+}
+
+export function mergeParameters(
+  left: Record<string, CliParameterValue>,
+  right: Record<string, CliParameterValue>
+): Record<string, CliParameterValue> {
+  const merged: Record<string, CliParameterValue> = { ...left };
+  for (const [key, value] of Object.entries(right)) {
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        appendParameterValue(merged, key, entry);
+      }
+      continue;
+    }
+
+    appendParameterValue(merged, key, value);
+  }
+
+  return merged;
+}
+
+function appendParameterValue(parameters: Record<string, CliParameterValue>, key: string, value: CliParameterValue): void {
+  const currentValue = parameters[key];
+  if (currentValue === undefined) {
+    parameters[key] = value;
+    return;
+  }
+
+  parameters[key] = [...toStringArray(currentValue), ...toStringArray(value)];
+}
+
+function toStringArray(value: CliParameterValue): string[] {
+  return Array.isArray(value) ? value : [String(value)];
 }

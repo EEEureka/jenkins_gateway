@@ -4,8 +4,11 @@ import { JenkinsHttpError } from "./errors.js";
 import { buildPath, jobPathToUrlPath, normalizeJobPath } from "./job-paths.js";
 import {
   extractParameterDefinitions,
+  markChoicesUnavailable,
   mergeBuildPageChoices,
   validateBuildParameterValues,
+  verifyBuildParameterValues,
+  type ParameterVerificationResult,
   type JenkinsBuildParameter
 } from "./parameters.js";
 
@@ -70,8 +73,12 @@ export interface JenkinsConsoleLog {
 export interface JenkinsBuildTriggerResult {
   jobPath: string;
   queued: true;
+  submitMode?: JenkinsBuildSubmitMode;
   queueUrl?: string;
   queueId?: number;
+  buildNumber?: number;
+  build?: Record<string, unknown>;
+  parameterVerification?: ParameterVerificationResult;
 }
 
 export interface JenkinsStopBuildResult {
@@ -92,6 +99,14 @@ export interface JenkinsQueueWaitResult {
 export interface WaitOptions {
   timeoutMs?: number;
   intervalMs?: number;
+}
+
+export type JenkinsBuildSubmitMode = "auto" | "urlencoded" | "jenkins-form";
+
+export interface JenkinsBuildTriggerOptions extends WaitOptions {
+  submitMode?: JenkinsBuildSubmitMode;
+  waitForStart?: boolean;
+  verifyParameters?: boolean;
 }
 
 interface JenkinsCrumb {
@@ -234,7 +249,9 @@ export class JenkinsClient {
         const html = await this.requestText(`${jobPathToUrlPath(jobPath)}/build`);
         parameters = mergeBuildPageChoices(parameters, html);
       } catch (error) {
-        if (!(error instanceof JenkinsHttpError && (error.status === 404 || error.status === 405))) {
+        if (error instanceof JenkinsHttpError && (error.status === 404 || error.status === 405)) {
+          parameters = markChoicesUnavailable(parameters, `build-page-${error.status}`);
+        } else {
           throw error;
         }
       }
@@ -250,7 +267,7 @@ export class JenkinsClient {
     const response = await this.requestJson<Record<string, unknown>>(`${buildPath(jobPath, build)}/api/json`, {
       searchParams: {
         tree:
-          "number,url,result,building,duration,estimatedDuration,timestamp,description,displayName,fullDisplayName,id,queueId,builtOn,actions[causes[*]],changeSet[*]"
+          "number,url,result,building,duration,estimatedDuration,timestamp,description,displayName,fullDisplayName,id,queueId,builtOn,actions[causes[*],parameters[name,value]],changeSet[*]"
       }
     });
 
@@ -299,37 +316,61 @@ export class JenkinsClient {
 
   async triggerBuild(
     jobPath: string,
-    parameters: Record<string, string | number | boolean | string[]> = {}
+    parameters: Record<string, string | number | boolean | string[]> = {},
+    options: JenkinsBuildTriggerOptions = {}
   ): Promise<JenkinsBuildTriggerResult> {
     await this.assertProtectedToolAllowed("jenkins.trigger_build", jobPath);
-    await this.validateBuildParameters(jobPath, parameters);
+    const definitions = Object.keys(parameters).length > 0 ? await this.getBuildParameters(jobPath) : undefined;
+    this.validateBuildParameters(parameters, definitions?.parameters ?? []);
 
     const hasParameters = Object.keys(parameters).length > 0;
-    const body = new URLSearchParams();
-    for (const [key, value] of Object.entries(parameters)) {
-      body.set(key, Array.isArray(value) ? value.join(",") : String(value));
-    }
+    const submitMode = resolveSubmitMode(options.submitMode ?? "auto", definitions?.parameters ?? []);
 
-    const response = await this.post(
-      `${jobPathToUrlPath(jobPath)}/${hasParameters ? "buildWithParameters" : "build"}`,
-      hasParameters
-        ? {
-            body,
-            headers: {
-              "content-type": "application/x-www-form-urlencoded"
-            }
-          }
-        : {}
-    );
+    const response = hasParameters
+      ? await this.submitParameterizedBuild(jobPath, parameters, submitMode)
+      : await this.post(`${jobPathToUrlPath(jobPath)}/build`);
 
     const queueUrl = response.headers.get("location") ?? undefined;
-
-    return {
+    const result: JenkinsBuildTriggerResult = {
       jobPath: normalizeJobPath(jobPath),
       queued: true,
+      submitMode,
       queueUrl,
       queueId: queueUrl ? extractQueueId(queueUrl) : undefined
     };
+
+    if (options.waitForStart || options.verifyParameters) {
+      if (result.queueId === undefined) {
+        throw new Error(`Jenkins build was queued without a queue id; cannot wait for build start`);
+      }
+
+      const queue = await this.waitForQueueItem(result.queueId, options);
+      if (queue.executable?.number !== undefined) {
+        result.buildNumber = queue.executable.number;
+        result.build = await this.getBuild(jobPath, queue.executable.number);
+      }
+    }
+
+    if (options.verifyParameters) {
+      if (!result.build) {
+        throw new Error(`Jenkins build did not expose an executable build; cannot verify parameters`);
+      }
+
+      const verification = verifyBuildParameterValues(parameters, result.build);
+      result.parameterVerification = verification;
+      if (!verification.ok) {
+        const details = verification.mismatches
+          .map((entry) => `${entry.name} expected=${entry.expected.join(",")} actual=${entry.actual.join(",") || "<empty>"}`)
+          .join("; ");
+        throw new Error(
+          `Jenkins build parameter verification failed for ${normalizeJobPath(jobPath)}${
+            result.buildNumber !== undefined ? ` #${result.buildNumber}` : ""
+          }: ${details}`
+        );
+      }
+    }
+
+    return result;
   }
 
   async stopBuild(jobPath: string, build: number | string): Promise<JenkinsStopBuildResult> {
@@ -536,16 +577,30 @@ export class JenkinsClient {
     assertProtectedToolDecision(await this.explainProtectedToolDecision(toolName, jobPath));
   }
 
-  private async validateBuildParameters(
-    jobPath: string,
-    parameters: Record<string, string | number | boolean | string[]>
-  ): Promise<void> {
+  private validateBuildParameters(
+    parameters: Record<string, string | number | boolean | string[]>,
+    definitions: JenkinsBuildParameter[]
+  ): void {
     if (Object.keys(parameters).length === 0) {
       return;
     }
 
-    const { parameters: definitions } = await this.getBuildParameters(jobPath);
     validateBuildParameterValues(definitions, parameters);
+  }
+
+  private async submitParameterizedBuild(
+    jobPath: string,
+    parameters: Record<string, string | number | boolean | string[]>,
+    submitMode: Exclude<JenkinsBuildSubmitMode, "auto">
+  ): Promise<Response> {
+    const body = submitMode === "jenkins-form" ? createJenkinsFormBody(parameters) : createUrlEncodedParameters(parameters);
+
+    return this.post(`${jobPathToUrlPath(jobPath)}/${submitMode === "jenkins-form" ? "build" : "buildWithParameters"}`, {
+      body,
+      headers: {
+        "content-type": "application/x-www-form-urlencoded"
+      }
+    });
   }
 }
 
@@ -561,6 +616,50 @@ function viewPath(viewName: string): string {
   }
 
   return `/view/${encodeURIComponent(normalizedViewName)}`;
+}
+
+function resolveSubmitMode(
+  submitMode: JenkinsBuildSubmitMode,
+  parameters: JenkinsBuildParameter[]
+): Exclude<JenkinsBuildSubmitMode, "auto"> {
+  if (submitMode !== "auto") {
+    return submitMode;
+  }
+
+  return parameters.some((parameter) => parameter.kind === "extended-choice-checkbox") ? "jenkins-form" : "urlencoded";
+}
+
+function createUrlEncodedParameters(parameters: Record<string, string | number | boolean | string[]>): URLSearchParams {
+  const body = new URLSearchParams();
+  for (const [key, value] of Object.entries(parameters)) {
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        body.append(key, entry);
+      }
+      continue;
+    }
+
+    body.set(key, String(value));
+  }
+
+  return body;
+}
+
+function createJenkinsFormBody(parameters: Record<string, string | number | boolean | string[]>): URLSearchParams {
+  const body = createUrlEncodedParameters(parameters);
+  body.set(
+    "json",
+    JSON.stringify({
+      parameter: Object.entries(parameters).map(([name, value]) => ({
+        name,
+        value
+      })),
+      statusCode: "303",
+      redirectTo: "."
+    })
+  );
+
+  return body;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

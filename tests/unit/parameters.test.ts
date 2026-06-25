@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   extractParameterDefinitions,
   mergeBuildPageChoices,
-  validateBuildParameterValues
+  validateBuildParameterValues,
+  verifyBuildParameterValues
 } from "../../src/core/parameters.js";
 
 describe("build parameter helpers", () => {
@@ -55,6 +56,32 @@ describe("build parameter helpers", () => {
     });
   });
 
+  it("extracts extended choice values from job api value fields", () => {
+    const [parameter] = extractParameterDefinitions({
+      property: [
+        {
+          parameterDefinitions: [
+            {
+              name: "serviceList",
+              type: "PT_CHECKBOX",
+              _class: "com.cwctravel.hudson.plugins.extended_choice_parameter.ExtendedChoiceParameterDefinition",
+              value: "MACC-FRONT-RELEASE,OCE-RELEASE",
+              multiSelectDelimiter: ","
+            }
+          ]
+        }
+      ]
+    });
+
+    expect(parameter).toMatchObject({
+      name: "serviceList",
+      kind: "extended-choice-checkbox",
+      choices: ["MACC-FRONT-RELEASE", "OCE-RELEASE"],
+      choicesSource: "job-api-value",
+      multiValue: true
+    });
+  });
+
   it("rejects submitted values outside known choices", () => {
     expect(() =>
       validateBuildParameterValues(
@@ -71,5 +98,35 @@ describe("build parameter helpers", () => {
         }
       )
     ).toThrow("Invalid Jenkins parameter value");
+  });
+
+  it("detects parameters that did not land in the build", () => {
+    const verification = verifyBuildParameterValues(
+      {
+        serviceList: "MACC-FRONT-RELEASE"
+      },
+      {
+        actions: [
+          {
+            parameters: [
+              {
+                name: "serviceList",
+                value: ""
+              }
+            ]
+          }
+        ]
+      }
+    );
+
+    expect(verification).toMatchObject({
+      ok: false,
+      mismatches: [
+        {
+          name: "serviceList",
+          reason: "empty"
+        }
+      ]
+    });
   });
 });
