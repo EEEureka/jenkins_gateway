@@ -1,18 +1,16 @@
-# Jenkins Gateway MCP User Manual
+# Jenkins Gateway User Manual
 
 [README](../README.md) | [中文使用手册](manual.zh.md)
 
 ## 1. Overview
 
-Jenkins Gateway MCP is a local gateway for Jenkins HTTP API. It provides:
+Jenkins Gateway is a local gateway for Jenkins HTTP API. It provides:
 
 - A stdio MCP server for Codex and other MCP clients.
 - A JSON-oriented CLI for scripts, CI, local debugging, and skills.
 - A shared core that contains Jenkins HTTP access, configuration loading, redaction, parameter handling, protected-tool authorization, and workflow orchestration.
 
 The gateway does not require any Jenkins server-side plugin. It only needs a Jenkins user ID, an API token, and network access from the local machine to Jenkins.
-
-The repository must remain private until the project passes new-architecture acceptance and the pre-publication security review. The npm package must not be published before that checkpoint.
 
 ## 2. Architecture
 
@@ -38,7 +36,7 @@ flowchart LR
 
 Design principles:
 
-- Keep Jenkins account, token, and server URL outside Git-tracked code.
+- Load Jenkins account, token, and server URL from runtime configuration.
 - Keep MCP transport simple with stdio for local tool integration.
 - Keep MCP tools discoverable and bounded by schema.
 - Put complex workflow logic in CLI/shared core so it can be tested deterministically.
@@ -46,14 +44,12 @@ Design principles:
 
 ## 3. Installation And Deployment
 
-### 3.1 Private Source Checkout
-
-Use source checkout before the package is published to npm.
+### 3.1 Source Checkout
 
 Windows PowerShell:
 
 ```powershell
-git clone <private-repo-url>
+git clone <repo-url>
 cd jenkins_gateway
 npm install
 npm run build
@@ -70,7 +66,7 @@ node dist/cli.js mcp stdio
 macOS / Linux:
 
 ```bash
-git clone <private-repo-url>
+git clone <repo-url>
 cd jenkins_gateway
 npm install
 npm run build
@@ -84,16 +80,14 @@ node dist/cli.js server info --json
 node dist/cli.js mcp stdio
 ```
 
-### 3.2 Future npx Deployment
-
-After the repository becomes public and the npm package is published:
+### 3.2 npx Package
 
 ```powershell
 # Windows PowerShell
 $env:JENKINS_BASE_URL="https://jenkins.example.com/"
 $env:JENKINS_USER_ID="replace-with-jenkins-user-id"
 $env:JENKINS_API_TOKEN="<jenkins-api-token>"
-npx -y jenkins-gateway-mcp mcp stdio
+npx -y jenkins-gateway mcp stdio
 ```
 
 ```bash
@@ -101,10 +95,10 @@ npx -y jenkins-gateway-mcp mcp stdio
 export JENKINS_BASE_URL="https://jenkins.example.com/"
 export JENKINS_USER_ID="replace-with-jenkins-user-id"
 export JENKINS_API_TOKEN="<jenkins-api-token>"
-npx -y jenkins-gateway-mcp mcp stdio
+npx -y jenkins-gateway mcp stdio
 ```
 
-If the final npm package uses a scoped name, replace `jenkins-gateway-mcp` with the scoped package name.
+If the final npm package uses a scoped name, replace `jenkins-gateway` with the scoped package name.
 
 ## 4. Configuration
 
@@ -131,11 +125,11 @@ Optional variables:
 | `JENKINS_MCP_CONSOLE_LOG_MAX_BYTES` | `65536` | Default maximum console log bytes per call. |
 | `JENKINS_MCP_LOG_LEVEL` | `info` | Log level. |
 
-Local files such as `.env.local` and `.codex/config.toml` are ignored and must stay untracked.
+Choose a local configuration method for credentials, such as shell environment variables or the MCP client's environment block.
 
 ## 5. Codex MCP Configuration
 
-Private source checkout:
+Source checkout:
 
 ```toml
 [mcp_servers.jenkins]
@@ -151,12 +145,12 @@ JENKINS_MCP_ENABLE_PROTECTED_TOOLS = "false"
 JENKINS_MCP_PROTECTED_ALLOW_ALL = "false"
 ```
 
-Future npm package:
+npx package:
 
 ```toml
 [mcp_servers.jenkins]
 command = "npx"
-args = ["-y", "jenkins-gateway-mcp", "mcp", "stdio"]
+args = ["-y", "jenkins-gateway", "mcp", "stdio"]
 
 [mcp_servers.jenkins.env]
 JENKINS_MCP_PROFILE = "example"
@@ -185,7 +179,6 @@ Start MCP server:
 
 ```bash
 jenkins-gateway mcp stdio
-jenkins-gateway-mcp mcp stdio
 ```
 
 Server probe:
@@ -309,52 +302,14 @@ Before a parameterized trigger, known choice values are validated. Invalid value
 
 ## 11. Security And Logging
 
-- Do not commit `.env.local`, `.codex/config.toml`, API tokens, crumbs, authorization headers, or full console logs.
+- Store Jenkins credentials in environment variables or local MCP client configuration.
 - Normal structured outputs redact configured API tokens.
 - MCP stdout is reserved for protocol traffic; logs must go to stderr.
 - Write operations are never retried automatically after failure.
 - Console log content is not redacted and should be treated as protected data.
-- If a Jenkins token is ever copied into Git history, screenshots, logs, issue text, or public chat, rotate it immediately.
+- Rotate a Jenkins token if it is exposed in screenshots, logs, issue text, or chat.
 
-## 12. Testing Gates
-
-Before moving to the next implementation or release stage, run:
-
-```bash
-npm run typecheck
-npm run build
-npm test
-npm pack --dry-run --ignore-scripts
-```
-
-The package dry run must not include:
-
-- `.env.local`
-- `.codex/config.toml`
-- local logs
-- npm tokens
-- Jenkins API tokens
-- test fixtures or local temporary outputs
-
-## 13. Release Policy
-
-Private validation:
-
-- Keep the GitHub repository private.
-- Keep `package.json` as `"private": true`.
-- Do not publish to npm.
-- Use source checkout for local and Codex validation.
-
-Public release:
-
-1. Finish new-architecture acceptance.
-2. Finish pre-publication security scan over current files and Git history.
-3. Confirm package contents with `npm pack --dry-run --ignore-scripts`.
-4. Convert GitHub repository from private to public.
-5. Publish the npm package through a controlled release workflow.
-6. Validate `npx -y jenkins-gateway-mcp mcp stdio` in a clean Windows and macOS/Linux environment.
-
-## 14. Troubleshooting
+## 12. Troubleshooting
 
 `JENKINS_BASE_URL is required`
 

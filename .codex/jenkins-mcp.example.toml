@@ -1,15 +1,14 @@
-# Copy this into your local Codex config after the package exists.
-# Do not commit real tokens.
+# Example Codex MCP server configuration.
 
 [mcp_servers.jenkins]
 command = "npx"
-args = ["-y", "jenkins-gateway-mcp"]
+args = ["-y", "jenkins-gateway", "mcp", "stdio"]
 
 [mcp_servers.jenkins.env]
 JENKINS_MCP_PROFILE = "example"
 JENKINS_BASE_URL = "https://jenkins.example.com/"
 JENKINS_USER_ID = "replace-with-jenkins-user-id"
-JENKINS_API_TOKEN = "<local-token>"
+JENKINS_API_TOKEN = "<jenkins-api-token>"
 JENKINS_MCP_ENABLE_PROTECTED_TOOLS = "false"
 JENKINS_MCP_PROTECTED_ALLOW_ALL = "false"
 JENKINS_MCP_PROTECTED_VIEW_ALLOWLIST = ""

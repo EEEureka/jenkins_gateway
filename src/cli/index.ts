@@ -26,7 +26,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<number> {
     return 0;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const prefix = error instanceof CliUsageError ? "usage error" : "jenkins-gateway-mcp failed";
+    const prefix = error instanceof CliUsageError ? "usage error" : "jenkins-gateway failed";
     stderr.write(`${prefix}: ${message}\n`);
     return 1;
   }

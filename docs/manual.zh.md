@@ -1,18 +1,16 @@
-# Jenkins Gateway MCP 使用手册
+# Jenkins Gateway 使用手册
 
 [中文 README](../README.zh.md) | [User Manual](manual.en.md)
 
 ## 1. 项目概览
 
-Jenkins Gateway MCP 是一个面向 Jenkins HTTP API 的本地网关，提供：
+Jenkins Gateway 是一个面向 Jenkins HTTP API 的本地网关，提供：
 
 - 面向 Codex 和其他 MCP 客户端的 stdio MCP server。
 - 面向脚本、CI、本地调试和 skill 的 JSON CLI。
 - 共享 core，用于 Jenkins HTTP 访问、配置加载、脱敏、参数处理、受保护工具授权和工作流编排。
 
 该方案不需要在 Jenkins 服务器端安装 MCP 插件，只要求本机具备 Jenkins 用户 ID、API token 和到 Jenkins 的网络访问。
-
-在新架构验收和公开前安全检查完成之前，仓库应保持 private，不应发布 npm package。
 
 ## 2. 架构
 
@@ -38,7 +36,7 @@ flowchart LR
 
 设计原则：
 
-- Jenkins 账号、token、服务器地址不进入 Git 跟踪文件。
+- Jenkins 账号、token、服务器地址从运行时配置读取。
 - MCP transport 优先使用 stdio，便于本地工具装载。
 - MCP tools 保持可发现、参数结构清晰、权限边界明确。
 - 复杂工作流放入 CLI/shared core，便于测试和复用。
@@ -46,14 +44,12 @@ flowchart LR
 
 ## 3. 安装与部署
 
-### 3.1 私有源码部署
-
-适用于 npm package 尚未公开发布的阶段。
+### 3.1 源码部署
 
 Windows PowerShell：
 
 ```powershell
-git clone <private-repo-url>
+git clone <repo-url>
 cd jenkins_gateway
 npm install
 npm run build
@@ -70,7 +66,7 @@ node dist/cli.js mcp stdio
 macOS / Linux：
 
 ```bash
-git clone <private-repo-url>
+git clone <repo-url>
 cd jenkins_gateway
 npm install
 npm run build
@@ -84,16 +80,14 @@ node dist/cli.js server info --json
 node dist/cli.js mcp stdio
 ```
 
-### 3.2 未来 npx 部署
-
-仓库转 public 且 npm package 发布后，可以使用：
+### 3.2 npx 包部署
 
 ```powershell
 # Windows PowerShell
 $env:JENKINS_BASE_URL="https://jenkins.example.com/"
 $env:JENKINS_USER_ID="replace-with-jenkins-user-id"
 $env:JENKINS_API_TOKEN="<jenkins-api-token>"
-npx -y jenkins-gateway-mcp mcp stdio
+npx -y jenkins-gateway mcp stdio
 ```
 
 ```bash
@@ -101,10 +95,10 @@ npx -y jenkins-gateway-mcp mcp stdio
 export JENKINS_BASE_URL="https://jenkins.example.com/"
 export JENKINS_USER_ID="replace-with-jenkins-user-id"
 export JENKINS_API_TOKEN="<jenkins-api-token>"
-npx -y jenkins-gateway-mcp mcp stdio
+npx -y jenkins-gateway mcp stdio
 ```
 
-如果最终使用 scoped package，需要把 `jenkins-gateway-mcp` 替换成实际包名。
+如果最终使用 scoped package，需要把 `jenkins-gateway` 替换成实际包名。
 
 ## 4. 配置
 
@@ -131,11 +125,11 @@ npx -y jenkins-gateway-mcp mcp stdio
 | `JENKINS_MCP_CONSOLE_LOG_MAX_BYTES` | `65536` | 单次 console log 默认最大返回字节数。 |
 | `JENKINS_MCP_LOG_LEVEL` | `info` | 日志级别。 |
 
-`.env.local`、`.codex/config.toml` 等本机文件已被忽略，必须保持不被 Git 跟踪。
+可以选择一种本机配置方式提供凭据，例如 shell 环境变量或 MCP 客户端的环境变量块。
 
 ## 5. Codex MCP 配置
 
-私有源码部署：
+源码部署：
 
 ```toml
 [mcp_servers.jenkins]
@@ -151,12 +145,12 @@ JENKINS_MCP_ENABLE_PROTECTED_TOOLS = "false"
 JENKINS_MCP_PROTECTED_ALLOW_ALL = "false"
 ```
 
-未来 npm package：
+npx 包：
 
 ```toml
 [mcp_servers.jenkins]
 command = "npx"
-args = ["-y", "jenkins-gateway-mcp", "mcp", "stdio"]
+args = ["-y", "jenkins-gateway", "mcp", "stdio"]
 
 [mcp_servers.jenkins.env]
 JENKINS_MCP_PROFILE = "example"
@@ -185,7 +179,6 @@ JENKINS_MCP_PROTECTED_JOB_DENYLIST = "example-danger-job"
 
 ```bash
 jenkins-gateway mcp stdio
-jenkins-gateway-mcp mcp stdio
 ```
 
 连接探测：
@@ -309,52 +302,14 @@ folder-a/folder-b/job-name
 
 ## 11. 安全与日志
 
-- 不提交 `.env.local`、`.codex/config.toml`、API token、crumb、Authorization header 或完整 console log。
+- Jenkins 凭据通过环境变量或本机 MCP 客户端配置提供。
 - 普通结构化输出会对已知 API token 做脱敏。
 - MCP stdout 只用于协议流量，日志必须写 stderr。
 - 写操作失败后不会自动重放。
 - Console log 内容不做脱敏，应按受保护数据处理。
-- 如果 Jenkins token 曾进入 Git 历史、截图、日志、issue 或公开对话，应立即轮换。
+- 如果 Jenkins token 出现在截图、日志、issue 或对话中，应立即轮换。
 
-## 12. 测试门禁
-
-进入下一阶段或发布前必须执行：
-
-```bash
-npm run typecheck
-npm run build
-npm test
-npm pack --dry-run --ignore-scripts
-```
-
-包内容检查必须确认不包含：
-
-- `.env.local`
-- `.codex/config.toml`
-- 本机日志
-- npm token
-- Jenkins API token
-- 测试 fixture 或本机临时输出
-
-## 13. 发布策略
-
-私有验证期：
-
-- GitHub 仓库保持 private。
-- `package.json` 保持 `"private": true`。
-- 不发布 npm package。
-- 使用源码 checkout 进行本地和 Codex 验证。
-
-公开发布期：
-
-1. 完成新架构验收。
-2. 完成当前文件和 Git 历史的公开前安全扫描。
-3. 使用 `npm pack --dry-run --ignore-scripts` 确认包内容。
-4. 将 GitHub 仓库从 private 转为 public。
-5. 通过受控 release workflow 发布 npm package。
-6. 在干净 Windows 和 macOS/Linux 环境中验证 `npx -y jenkins-gateway-mcp mcp stdio`。
-
-## 14. 常见问题
+## 12. 常见问题
 
 `JENKINS_BASE_URL is required`
 

@@ -14,7 +14,7 @@ export interface ServerOptions {
 
 export function createServer(options: ServerOptions = {}): McpServer {
   const server = new McpServer({
-    name: options.name ?? "jenkins-gateway-mcp",
+    name: options.name ?? "jenkins-gateway",
     version: options.version ?? "0.1.0"
   });
 

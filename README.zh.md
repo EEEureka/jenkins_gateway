@@ -1,16 +1,12 @@
-# Jenkins Gateway MCP
+# Jenkins Gateway
 
 [English README](README.md) | [使用手册](docs/manual.zh.md) | [User Manual](docs/manual.en.md)
 
-Jenkins Gateway MCP 是一个本地 stdio MCP Server 和 CLI 网关，用于在 Jenkins 服务器未安装 MCP 插件的情况下，让 Codex 等 MCP 客户端通过 Jenkins 现有 HTTP API 访问 Jenkins。
+Jenkins Gateway 是一个面向 Jenkins HTTP API 的本地 CLI 和 stdio MCP Server，用于在 Jenkins 服务器未安装 MCP 插件的情况下，让 Codex 等 MCP 客户端访问 Jenkins。
 
-网关运行在用户本机，通过环境变量读取 Jenkins 凭据，再以标准 Jenkins HTTP API 调用远端 Jenkins。仓库代码和可发布文档中不得包含真实 Jenkins URL、用户 ID、API token、crumb、Authorization header 或本机 Codex 配置。
+网关运行在用户本机，通过环境变量读取 Jenkins 凭据，再以标准 Jenkins HTTP API 调用远端 Jenkins。
 
-## 当前状态
-
-当前仓库仍处于私有验证阶段。在新架构验收和公开前安全检查完成之前，GitHub 仓库应保持 private，不发布 npm package。
-
-当前架构包含：
+## 架构
 
 - shared core：Jenkins HTTP 访问、配置、脱敏、参数解析、受保护工具授权和工作流。
 - CLI：服务本地脚本、CI 和 Codex skill。
@@ -25,12 +21,10 @@ Jenkins Gateway MCP 是一个本地 stdio MCP Server 和 CLI 网关，用于在 
 
 ## 快速部署
 
-### Windows PowerShell，私有源码部署
-
-适用于仓库仍为私有、npm package 尚未发布的阶段。
+### Windows PowerShell，源码部署
 
 ```powershell
-git clone <private-repo-url>
+git clone <repo-url>
 cd jenkins_gateway
 npm install
 npm run build
@@ -44,10 +38,10 @@ node dist/cli.js server info --json
 node dist/cli.js mcp stdio
 ```
 
-### macOS / Linux，私有源码部署
+### macOS / Linux，源码部署
 
 ```bash
-git clone <private-repo-url>
+git clone <repo-url>
 cd jenkins_gateway
 npm install
 npm run build
@@ -61,16 +55,14 @@ node dist/cli.js server info --json
 node dist/cli.js mcp stdio
 ```
 
-### npx，公开 npm 包发布后
-
-以下命令用于未来公开 npm package 发布之后。
+### npx 包部署
 
 ```powershell
 # Windows PowerShell
 $env:JENKINS_BASE_URL="https://jenkins.example.com/"
 $env:JENKINS_USER_ID="replace-with-jenkins-user-id"
 $env:JENKINS_API_TOKEN="<jenkins-api-token>"
-npx -y jenkins-gateway-mcp mcp stdio
+npx -y jenkins-gateway mcp stdio
 ```
 
 ```bash
@@ -78,12 +70,12 @@ npx -y jenkins-gateway-mcp mcp stdio
 export JENKINS_BASE_URL="https://jenkins.example.com/"
 export JENKINS_USER_ID="replace-with-jenkins-user-id"
 export JENKINS_API_TOKEN="<jenkins-api-token>"
-npx -y jenkins-gateway-mcp mcp stdio
+npx -y jenkins-gateway mcp stdio
 ```
 
 ## Codex MCP 配置
 
-私有源码验证配置：
+源码部署配置：
 
 ```toml
 [mcp_servers.jenkins]
@@ -99,15 +91,15 @@ JENKINS_MCP_ENABLE_PROTECTED_TOOLS = "false"
 JENKINS_MCP_PROTECTED_ALLOW_ALL = "false"
 ```
 
-未来 npm 配置：
+npx 包配置：
 
 ```toml
 [mcp_servers.jenkins]
 command = "npx"
-args = ["-y", "jenkins-gateway-mcp", "mcp", "stdio"]
+args = ["-y", "jenkins-gateway", "mcp", "stdio"]
 ```
 
-真实 Codex 配置应保存在本机 ignored 文件中，例如 `.codex/config.toml`。
+Jenkins 凭据可以写在本机 Codex MCP 环境变量块中，也可以由启动 Codex 的 shell 环境提供。
 
 ## 能力范围
 
@@ -131,4 +123,4 @@ args = ["-y", "jenkins-gateway-mcp", "mcp", "stdio"]
 - [User Manual](docs/manual.en.md)
 - [安全策略](SECURITY.md)
 
-完整 CLI 参考、MCP tool 列表、配置变量、受保护权限规则、架构设计、测试门禁和发布策略见使用手册。
+完整 CLI 参考、MCP tool 列表、配置变量、受保护权限规则和架构设计见使用手册。
