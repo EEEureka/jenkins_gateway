@@ -1,6 +1,6 @@
 # Jenkins Gateway
 
-[Chinese manual](docs/manual.zh.md) | [User Manual](docs/manual.en.md)
+[中文 README](README.zh.md) | [User Manual](docs/manual.en.md)
 
 Jenkins Gateway is a local CLI and stdio MCP server for Jenkins HTTP API. It lets Codex and other MCP clients work with an existing Jenkins server without installing any Jenkins-side MCP plugin.
 
@@ -121,7 +121,7 @@ Protected authorization supports all, view, and job granularity. Job rules take 
 ## Documentation
 
 - [User Manual](docs/manual.en.md)
-- [中文使用手册](docs/manual.zh.md)
+- [中文 README](README.zh.md)
 - [Security Policy](SECURITY.md)
 
 See the manual for the complete CLI reference, MCP tool list, configuration variables, protected-tool rules, and design details.

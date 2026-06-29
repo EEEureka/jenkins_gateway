@@ -1,6 +1,6 @@
 # Jenkins Gateway 使用手册
 
-[README](../README.md) | [User Manual](manual.en.md)
+[中文 README](../README.zh.md) | [English README](../README.md) | [User Manual](manual.en.md)
 
 ## 1. 项目概览
 
